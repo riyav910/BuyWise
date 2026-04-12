@@ -1,0 +1,31 @@
+# ======================
+# Backend (Python)
+# ======================
+backend/venv/
+backend/__pycache__/
+backend/*.pyc
+
+# ======================
+# Frontend (Node)
+# ======================
+frontend/node_modules/
+
+# ======================
+# Env files
+# ======================
+.env
+backend/.env
+frontend/.env
+
+# ======================
+# OS / IDE
+# ======================
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# ======================
+# Logs
+# ======================
+*.log
