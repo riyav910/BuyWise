@@ -4,6 +4,7 @@
 backend/venv/
 backend/__pycache__/
 backend/*.pyc
+backend/cache
 
 # ======================
 # Frontend (Node)

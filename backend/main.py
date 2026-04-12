@@ -3,8 +3,9 @@ from pydantic import BaseModel
 from fastapi.middleware.cors import CORSMiddleware
 import json
 from redis_client import r
-# from backend.scrapers.scraper import scrape_product
-from backend.scrapers.bigbasket import scrape_product_bigbasket
+from scrapers.bigbasket import scrape_bigbasket
+from scrapers.zepto import scrape_zepto
+from compare import compare_products
 
 app = FastAPI()
 
@@ -69,7 +70,7 @@ async def fetch_product_data(product_name):
     # 2️⃣ Scrape (SAFE)
     try:
         print(f"🕸️ Initiating scraping for: {product_name}")
-        data = await scrape_product_bigbasket(product_name)
+        data = await scrape_bigbasket(product_name)
 
         if not data:
             raise Exception("Empty scrape result")
@@ -79,7 +80,7 @@ async def fetch_product_data(product_name):
 
         # 🔥 fallback (IMPORTANT)
         data = {
-            "blinkit": {"price": 60, "delivery": 20, "eta": 10},
+            "bigbasket": {"price": 60, "delivery": 20, "eta": 10},
             "zepto": {"price": 55, "delivery": 25, "eta": 15}
         }
 
@@ -96,28 +97,19 @@ async def fetch_product_data(product_name):
 @app.post("/compare")
 async def compare_prices(request: ItemRequest):
     try:
-        platform_totals = {}
+        results = []
 
         for item in request.items:
-            product_data = await fetch_product_data(item)
+            # run both scrapers
+            bb = await scrape_bigbasket(item)
+            zp = await scrape_zepto(item)
 
-            for platform, details in product_data.items():
-                if platform not in platform_totals:
-                    platform_totals[platform] = {
-                        "items_price": 0,
-                        "delivery_fee": details["delivery"],
-                        "eta": details["eta"]
-                    }
+            results.append(bb)
+            results.append(zp)
 
-                platform_totals[platform]["items_price"] += details["price"]
+        final = compare_products(results)
 
-        for platform in platform_totals:
-            platform_totals[platform]["total_cost"] = (
-                platform_totals[platform]["items_price"] +
-                platform_totals[platform]["delivery_fee"]
-            )
-
-        return platform_totals
+        return final
 
     except Exception as e:
         print(f"🔥 API ERROR: {e}")

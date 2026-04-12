@@ -1,68 +1,94 @@
-from playwright.sync_api import sync_playwright
 import asyncio
-import time
+from playwright.async_api import async_playwright
+import re
 
 
-async def scrape_product_bigbasket(product_name):
+async def scrape_bigbasket(product_name):
     print(f"\n🕸️ [SCRAPER] Starting for: {product_name}")
 
-    with sync_playwright() as p:
-        browser = p.chromium.launch(headless=False)  # keep False for debugging
-        page = browser.new_page()
+    async with async_playwright() as p:
+        print("🌐 Launching browser...")
+        browser = await p.chromium.launch(headless=False)
 
-        print("🌐 Opening BigBasket...")
-        page.goto(f"https://www.bigbasket.com/ps/?q={product_name}")
+        page = await browser.new_page()
+        print("📄 Opening page...")
 
-        # wait for products to load
-        print("⏳ Waiting for products...")
-        page.wait_for_selector("h3")  # product titles usually in h3
+        await page.goto(f"https://www.bigbasket.com/ps/?q={product_name}")
 
-        time.sleep(2)
+        print("⏳ Waiting for page load...")
+        # await page.wait_for_selector("text=₹")
 
-        # get all product cards
-        products = page.query_selector_all("h3")
+        # price_element = await page.query_selector("text=₹")
+        # price_text = await price_element.inner_text()
 
-        print(f"🔍 Found {len(products)} products")
+        # print(f"💰 Price raw: {price_text}")
 
-        results = []
+        # digits = ''.join(filter(str.isdigit, price_text))
+        # price_value = int(digits) if digits else 50
 
-        for i, product in enumerate(products[:5]):  # limit to first 5
+        # await browser.close()
+
+        # return {
+        #     "bigbasket": {
+        #         "price": price_value,
+        #         "delivery": 30,
+        #         "eta": 20
+        #     }
+        # }
+        
+        # Wait for products to load
+        await page.wait_for_selector("text=₹")
+
+        print("🔍 Extracting products...")
+
+        # Get all price elements
+        price_elements = await page.query_selector_all("text=₹")
+
+        print(f"💰 Found {len(price_elements)} price elements")
+
+        extracted_products = []
+
+        for i, price_el in enumerate(price_elements[:10]):  # limit
             try:
-                name = product.inner_text()
+                price_text = await price_el.inner_text()
+                price_value = float(re.sub(r"[^\d.]", "", price_text))
 
-                # go up to parent and find price
-                parent = product.evaluate_handle("node => node.closest('div')")
+                # Try to find nearby product name
+                # parent = await price_el.evaluate_handle("node => node.closest('div')")
 
-                price_element = parent.query_selector("span")
+                # name_element = await parent.query_selector("a, h3")
 
-                price = price_element.inner_text() if price_element else "N/A"
+                # name = await name_element.inner_text() if name_element else "Unknown"
 
-                print(f"🛒 {i+1}. {name} → {price}")
+                # print(f"🛒 {i+1}. {name} → ₹{price_value}")
+                
+                print("extracted price from bigbasket")
 
-                results.append({
-                    "name": name,
-                    "price": price
+                extracted_products.append({
+                    "name": product_name,
+                    "price": price_value
                 })
 
             except Exception as e:
-                print(f"⚠️ Error extracting product: {e}")
+                print(f"⚠️ Error: {e}")
+                
+        if extracted_products:
+            best_product = extracted_products[0]
 
-        browser.close()
-
-        # ⚡ Convert into your system format
-        if results:
-            # pick first product as best match
-            first = results[0]
-
-            # extract numeric price
-            price_value = int(''.join(filter(str.isdigit, first["price"])) or 50)
+            print(f"\n✅ Selected: {best_product}")
 
             return {
-                "bigbasket": {
-                    "price": price_value,
-                    "delivery": 30,
-                    "eta": 20
-                }
+                # "bigbasket": {
+                #     "price": best_product["price"],
+                #     "delivery": 30,
+                #     "eta": 20
+                # }
+                "platform": "bigbasket",
+                "price": best_product["price"],
+                "delivery": 20,
+                "eta": 15,
+                "product_name": product_name
             }
 
+        print("❌ No valid products found")
         return {}
