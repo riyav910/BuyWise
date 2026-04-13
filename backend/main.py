@@ -4,17 +4,19 @@ from fastapi.middleware.cors import CORSMiddleware
 import json
 from redis_client import r
 # from backend.scrapers.scraper import scrape_product
-from backend.scrapers.bigbasket import scrape_product_bigbasket
+from scrapers.bigbasket import scrape_product_bigbasket
 
-app = FastAPI()
-
-import asyncio
 import sys
+import asyncio
 
 if sys.platform == "win32":
     asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
+
+
+app = FastAPI()
+
+users_db = {}
+
 
 # ✅ CORS
 app.add_middleware(
@@ -88,6 +90,52 @@ async def fetch_product_data(product_name):
 
     return data
 
+# =========================
+# LOGIN API
+# =========================
+@app.post("/login")
+def login(data: dict):
+    email = data.get("email")
+    password = data.get("password")
+
+    # Dummy login check (replace with DB later)
+    if email == "admin@buywise.com" and password == "1234":
+        return {
+            "status": "success",
+            "token": "buywise_dummy_token_123"
+        }
+
+    return {
+        "status": "failed",
+        "message": "Invalid credentials"
+    }
+    
+    # =========================
+# SIGNUP API
+# =========================
+
+
+@app.post("/signup")
+def signup(data: dict):
+    name = data.get("name")
+    email = data.get("email")
+    password = data.get("password")
+
+    # check if user already exists
+    if email in users_db:
+        return {"status": "failed", "message": "User already exists"}
+
+    # save user
+    users_db[email] = {
+        "name": name,
+        "email": email,
+        "password": password
+    }
+
+    return {
+        "status": "success",
+        "message": "Account created successfully"
+    }
 
 # =========================
 # 🧮 MAIN API
@@ -122,3 +170,8 @@ async def compare_prices(request: ItemRequest):
     except Exception as e:
         print(f"🔥 API ERROR: {e}")
         return {"error": str(e)}
+    
+   
+
+    
+    

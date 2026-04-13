@@ -1,9 +1,24 @@
 import { useState } from "react";
 import axios from "axios";
+import { BrowserRouter, Routes, Route } from "react-router-dom";
+import LoginPage from "./pages/LoginPage";
+import Navbar from "./components/Navbar";
+import CreateAccount from "./pages/CreateAccount";
+import { useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 
-function App() {
+function Home() {
   const [input, setInput] = useState("");
   const [result, setResult] = useState(null);
+
+  const navigate = useNavigate();
+
+  useEffect(() => {
+  const user = localStorage.getItem("user");
+  if (!user) {
+    navigate("/login");
+  }
+}, []);
 
   const handleCompare = async () => {
     const items = input.split(",").map(item => item.trim());
@@ -17,7 +32,10 @@ function App() {
 
   return (
     <div style={{ padding: "20px" }}>
-      <h1>BuyWise 🛒</h1>
+      <div style={styles.header}>
+
+
+   </div>
 
       <input
         type="text"
@@ -46,4 +64,36 @@ function App() {
   );
 }
 
+function App() {
+  return (
+    <BrowserRouter>
+    <Navbar />
+      <Routes>
+        {/* Existing BuyWise page */}
+        <Route path="/" element={<Home />} />
+
+        {/* New Login page */}
+        <Route path="/login" element={<LoginPage />} />
+        <Route path="/signup" element={<CreateAccount />} />
+      </Routes>
+    </BrowserRouter>
+  );
+}
+
+const styles = {
+  header: {
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+
+  loginButton: {
+    padding: "8px 15px",
+    background: "#2563eb",
+    color: "white",
+    border: "none",
+    borderRadius: "6px",
+    cursor: "pointer",
+  },
+};
 export default App;
