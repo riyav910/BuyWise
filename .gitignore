@@ -5,6 +5,7 @@ backend/venv/
 backend/__pycache__/
 backend/*.pyc
 backend/cache
+backend/scrapers/zepto_copy
 
 # ======================
 # Frontend (Node)
