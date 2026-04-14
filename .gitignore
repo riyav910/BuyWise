@@ -5,7 +5,8 @@ backend/venv/
 backend/__pycache__/
 backend/*.pyc
 backend/cache
-backend/scrapers/zepto_copy
+backend/scrapers/__pycache__
+backend/scrapers/instamart.py
 
 # ======================
 # Frontend (Node)

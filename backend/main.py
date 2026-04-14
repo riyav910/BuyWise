@@ -2,22 +2,33 @@ from fastapi import FastAPI
 from pydantic import BaseModel
 from fastapi.middleware.cors import CORSMiddleware
 import json
-from redis_client import r
+import asyncio
+import sys
+
+from redis_client import r  # ✅ use ONLY this
+
 from scrapers.bigbasket import scrape_bigbasket
+from scrapers.blinkit import scrape_blinkit
 from scrapers.zepto import scrape_zepto
+from scrapers.jiomart import scrape_jiomart
 from compare import compare_products
 
 app = FastAPI()
 
-import asyncio
-import sys
-
 if sys.platform == "win32":
     asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
 
-# ✅ CORS
+try:
+    print("Redis ping:", r.ping())
+except Exception as e:
+    print("Redis connection failed:", e)
+
+# if sys.platform == "win32":
+#     asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+#     loop = asyncio.new_event_loop()
+#     asyncio.set_event_loop(loop)
+
+#  CORS
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -26,72 +37,99 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# 📦 Request model
+# Request model
 class ItemRequest(BaseModel):
     items: list[str]
 
 
 # =========================
-# 🔁 CACHE FUNCTIONS
+# CACHE FUNCTIONS
 # =========================
 
 def get_cached_product(product_name):
-    print(f"\n🔍 Checking cache for: {product_name}")
+    product_name = product_name.lower().strip()
+    print(f"\nChecking cache for: {product_name}")
 
-    data = r.get(product_name)
-    if data:
-        print(f"✅ CACHE HIT: {product_name}")
-        return json.loads(data)
+    try:
+        data = r.get(product_name)
 
-    print(f"❌ CACHE MISS: {product_name}")
-    return None
+        if data:
+            print(f"CACHE HIT: {product_name}")
+            return json.loads(data)
+
+        print(f"CACHE MISS: {product_name}")
+        return None
+
+    except Exception as e:
+        print(f"Redis GET error: {e}")
+        return None
 
 
 def set_cache(product_name, data):
-    print(f"💾 Storing in cache: {product_name}")
-    r.setex(product_name, 300, json.dumps(data))
-    print(f"⏳ TTL set to 300 seconds")
+    product_name = product_name.lower().strip()
+    print(f"Storing in cache: {product_name}")
+    try:
+        r.setex(product_name, 3600, json.dumps(data))
+        print(f"TTL set to 3600 seconds")
+        print(f"Cached data: {data}")
+
+    except Exception as e:
+        print(f"Redis SET error: {e}")
 
 
 # =========================
-# 📊 FETCH LOGIC
+# FETCH LOGIC
 # =========================
 
 async def fetch_product_data(product_name):
-    product_name = product_name.lower()
-    print(f"\n📦 Processing item: {product_name}")
+    product_name = product_name.lower().strip()
+    print(f"\nProcessing item: {product_name}")
 
-    # 1️⃣ Cache check
+    # Cache check
     cached = get_cached_product(product_name)
     if cached:
-        print(f"⚡ Returning cached data for: {product_name}")
+        print(f"Returning cached data for: {product_name}")
         return cached
 
-    # 2️⃣ Scrape (SAFE)
-    try:
-        print(f"🕸️ Initiating scraping for: {product_name}")
-        data = await scrape_bigbasket(product_name)
+    print(f"Initiating scraping for: {product_name}")
 
-        if not data:
-            raise Exception("Empty scrape result")
+    try:
+        # Run ALL scrapers in parallel
+        responses = await asyncio.gather(
+            scrape_bigbasket(product_name),
+            scrape_blinkit(product_name),
+            scrape_zepto(product_name),
+            scrape_jiomart(product_name),
+            return_exceptions=True
+        )
+
+        valid_results = []
+
+        for res in responses:
+            if isinstance(res, Exception):
+                print(f"Scraper failed: {res}")
+                continue
+
+            if res:
+                valid_results.append(res)
+
+        if not valid_results:
+            raise Exception("All scrapers failed")
 
     except Exception as e:
-        print(f"❌ SCRAPER ERROR: {e}")
+        print(f"SCRAPER ERROR: {e}")
 
-        # 🔥 fallback (IMPORTANT)
-        data = {
-            "bigbasket": {"price": 60, "delivery": 20, "eta": 10},
-            "zepto": {"price": 55, "delivery": 25, "eta": 15}
-        }
+        # No fake fallback — return empty cleanly
+        return []
 
-    # 3️⃣ Cache store
-    set_cache(product_name, data)
+    # Cache store (store LIST of results)
+    set_cache(product_name, valid_results)
 
-    return data
+    return valid_results
 
 
 # =========================
-# 🧮 MAIN API
+# MAIN API
 # =========================
 
 @app.post("/compare")
@@ -100,17 +138,21 @@ async def compare_prices(request: ItemRequest):
         results = []
 
         for item in request.items:
-            # run both scrapers
-            bb = await scrape_bigbasket(item)
-            zp = await scrape_zepto(item)
+            print(f"\nProcessing: {item}")
 
-            results.append(bb)
-            results.append(zp)
+            # Run all scrapers in parallel
+            data = await fetch_product_data(item)
+
+            if data:
+                results.extend(data)
+                
+        if not results:
+            return {"message": "No data found"}
 
         final = compare_products(results)
 
         return final
 
     except Exception as e:
-        print(f"🔥 API ERROR: {e}")
+        print(f"API ERROR: {e}")
         return {"error": str(e)}

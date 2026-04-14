@@ -1,12 +1,12 @@
 def compare_products(results):
-    print("\n🧮 Comparing platforms...")
+    print("\nComparing platforms...")
 
     best = None
     best_score = float("inf")
 
     for res in results:
         if not res or "price" not in res:
-            print(f"⚠️ Skipping invalid result: {res}")
+            print(f"Skipping invalid result: {res}")
             continue
 
         score = res["price"] + res["delivery"]
@@ -20,7 +20,7 @@ def compare_products(results):
     if not best:
         return {"error": "No valid results"}
 
-    print(f"\n🏆 Best platform: {best['platform']}")
+    print(f"\nBest platform: {best['platform']}")
 
     return {
         "all": results,
