@@ -2,7 +2,7 @@ import { useState } from "react";
 import axios from "axios";
 import { useNavigate } from "react-router-dom";
 
-export default function LoginPage() {
+export default function Login() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const navigate = useNavigate();
@@ -17,21 +17,14 @@ export default function LoginPage() {
       });
 
       if (res.data.status === "success") {
-        // ✅ Store token
-        localStorage.setItem("token", res.data.token);
+        const userData = res.data.user;
+        localStorage.setItem("user", JSON.stringify(userData));
 
-        // ✅ Store user
-        localStorage.setItem(
-          "user",
-          JSON.stringify({
-            email: email,
-          })
-        );
+        window.dispatchEvent(new Event("storage"));
 
-        // ✅ Redirect to home
         navigate("/");
       } else {
-        alert("Invalid credentials");
+        alert(res.data.message);
       }
     } catch (err) {
       alert("Login failed");
@@ -41,7 +34,7 @@ export default function LoginPage() {
   return (
     <div style={styles.container}>
       <div style={styles.card}>
-        <h2>Login</h2>
+        <h2 style={styles.title}>Login</h2>
 
         <form onSubmit={handleLogin}>
           <input
@@ -68,9 +61,9 @@ export default function LoginPage() {
         </form>
 
         <p style={styles.text}>
-          Create a new account?{" "}
+          Don't have an account?{" "}
           <span style={styles.link} onClick={() => navigate("/signup")}>
-            Click here
+            Create Account
           </span>
         </p>
       </div>
@@ -78,45 +71,59 @@ export default function LoginPage() {
   );
 }
 
+/* styles unchanged */
 const styles = {
   container: {
     height: "100vh",
     display: "flex",
     justifyContent: "center",
     alignItems: "center",
-    background: "#ffffff",
+    background: "#eaf4ff", // ✅ very light blue
+    fontFamily: "Arial",
   },
 
   card: {
-    width: "320px",
-    padding: "24px",
-    borderRadius: "12px",
+    width: "340px",
+    padding: "28px",
+    borderRadius: "14px",
     background: "white",
-    boxShadow: "0 8px 20px rgba(0,0,0,0.08)",
-    border: "1px solid #f1f5f9",
+    boxShadow: "0 10px 30px rgba(0,0,0,0.10)",
+    border: "1px solid #e5e7eb",
+    textAlign: "center",
+  },
+
+  title: {
+    marginBottom: "18px",
+    fontSize: "22px",
+    fontWeight: "700",
+    color: "#111827",
   },
 
   input: {
     width: "100%",
-    padding: "10px",
+    padding: "11px",
     margin: "10px 0",
-    borderRadius: "5px",
-    border: "1px solid #ccc",
+    borderRadius: "8px",
+    border: "1px solid #d1d5db",
+    outline: "none",
   },
 
   button: {
     width: "100%",
-    padding: "10px",
+    padding: "11px",
     background: "#2563eb",
     color: "white",
     border: "none",
-    borderRadius: "5px",
+    borderRadius: "8px",
     cursor: "pointer",
+    fontWeight: "600",
+    marginTop: "10px",
   },
 
   text: {
-    marginTop: "10px",
+    marginTop: "12px",
     fontSize: "14px",
+    color: "#374151",
   },
 
   link: {

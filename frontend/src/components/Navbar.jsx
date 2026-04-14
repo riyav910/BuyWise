@@ -1,183 +1,190 @@
-import { useNavigate, useLocation } from "react-router-dom";
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 
 export default function Navbar() {
   const navigate = useNavigate();
-  const location = useLocation();
+  const [user, setUser] = useState(null);
+  const [openMenu, setOpenMenu] = useState(false);
 
-  const user = JSON.parse(localStorage.getItem("user"));
-  const [showMenu, setShowMenu] = useState(false);
+  // Load user initially
+  useEffect(() => {
+    const storedUser = JSON.parse(localStorage.getItem("user"));
+    setUser(storedUser);
+  }, []);
 
-  // ❌ hide buttons on login/signup pages
-  const hideNavOptions =
-    location.pathname === "/login" || location.pathname === "/signup";
+  // ✅ FIX: auto update navbar when login happens in same tab
+  useEffect(() => {
+    const handleStorageChange = () => {
+      const updatedUser = JSON.parse(localStorage.getItem("user"));
+      setUser(updatedUser);
+    };
 
-  // 🚪 Logout
+    window.addEventListener("storage", handleStorageChange);
+
+    return () => {
+      window.removeEventListener("storage", handleStorageChange);
+    };
+  }, []);
+
   const handleLogout = () => {
     localStorage.removeItem("user");
-    localStorage.removeItem("token");
+    setUser(null);
+    setOpenMenu(false);
     navigate("/login");
   };
 
   return (
     <div style={styles.navbar}>
+
       {/* LEFT SIDE */}
       <div style={styles.left}>
-        <div style={styles.brand} onClick={() => navigate("/")}>
-          <span style={styles.logo}>🛒</span>
-          <h2 style={styles.title}>BuyWise</h2>
-        </div>
+        <h2 style={styles.logo}>BuyWise 🛒</h2>
 
-        {/* ✅ Show Home only after login */}
-        {!hideNavOptions && user && (
-          <span style={styles.homeText} onClick={() => navigate("/")}>
-            Home
-          </span>
-        )}
+        <span style={styles.link} onClick={() => navigate("/")}>
+          Home
+        </span>
+
+        <span style={styles.link} onClick={() => navigate("/compare")}>
+          Compare
+        </span>
       </div>
 
       {/* RIGHT SIDE */}
       <div style={styles.right}>
-        {user ? (
+        {!user ? (
+          <button
+            style={styles.signupBtn}
+            onClick={() => navigate("/signup")}
+          >
+            Create Account
+          </button>
+        ) : (
           <div style={styles.userWrapper}>
-            {/* 👤 USER ICON */}
+
+            {/* USER ICON */}
             <div
               style={styles.userIcon}
-              onClick={() => setShowMenu(!showMenu)}
-              title={user.name || user.email}
+              onClick={() => setOpenMenu(!openMenu)}
             >
-              👤
+              {/* ✅ FULL NAME NOW SHOWN */}
+              {user?.name || "User"}
             </div>
 
             {/* DROPDOWN */}
-            {showMenu && (
+            {openMenu && (
               <div style={styles.dropdown}>
-                <p style={styles.userName}>
-                  {user.name || user.email}
+                <p style={styles.username}>
+                  {user?.name}
                 </p>
 
-                <button style={styles.logoutBtn} onClick={handleLogout}>
+                <hr style={{ margin: "8px 0" }} />
+
+                <button
+                  style={styles.logoutBtn}
+                  onClick={handleLogout}
+                >
                   Logout
                 </button>
               </div>
             )}
           </div>
-        ) : (
-          // ❌ Hide button on login/signup page
-          !hideNavOptions && (
-            <button
-              style={styles.button}
-              onClick={() => navigate("/signup")}
-            >
-              Create Account
-            </button>
-          )
         )}
       </div>
     </div>
   );
 }
 
+/* ================= STYLES ================= */
 const styles = {
   navbar: {
-    display: "flex",
-    justifyContent: "space-between",
-    alignItems: "center",
-    padding: "12px 20px",
-    backgroundColor: "#f9fafb", // light color
-    borderBottom: "1px solid #e5e7eb",
-  },
+  position: "fixed",   // ✅ keeps navbar fixed
+  top: 0,
+  left: 0,
+  width: "100%",       // full width
+  zIndex: 1000,        // stays above everything
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "center",
+  padding: "10px 20px",
+  backgroundColor: "#f9fafb",
+  borderBottom: "1px solid #e5e7eb",
+  fontFamily: "Arial",
+},
 
   left: {
     display: "flex",
     alignItems: "center",
-    gap: "20px",
-  },
-
-  brand: {
-    display: "flex",
-    alignItems: "center",
-    gap: "8px",
-    cursor: "pointer",
+    gap: "18px",
   },
 
   logo: {
-    fontSize: "22px",
-  },
-
-  title: {
     margin: 0,
-    fontSize: "20px",
     fontWeight: "bold",
-    color: "#1e3a8a",
+    fontSize: "20px",
   },
 
-  homeText: {
+  link: {
     cursor: "pointer",
-    color: "#1e3a8a",
-    fontWeight: "500",
+    fontSize: "15px",
+    color: "#111",
   },
 
   right: {
     display: "flex",
     alignItems: "center",
-    position: "relative",
+  },
+
+  signupBtn: {
+    padding: "8px 14px",
+    borderRadius: "6px",
+    border: "none",
+    backgroundColor: "#2563eb",
+    color: "white",
+    cursor: "pointer",
   },
 
   userWrapper: {
     position: "relative",
+    cursor: "pointer",
   },
 
   userIcon: {
-    fontSize: "18px",
-    cursor: "pointer",
-    backgroundColor: "#e0e7ff",
+    padding: "8px 12px",
+    borderRadius: "20px",
+    backgroundColor: "#dbeafe",
+    fontWeight: "bold",
     color: "#1e3a8a",
-    width: "36px",
-    height: "36px",
-    borderRadius: "50%",
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    border: "1px solid #c7d2fe",
+    minWidth: "80px",
+    textAlign: "center",
   },
 
   dropdown: {
     position: "absolute",
-    right: 0,
-    top: "40px",
-    backgroundColor: "white",
-    border: "1px solid #ddd",
-    borderRadius: "6px",
-    padding: "10px",
-    boxShadow: "0 4px 10px rgba(0,0,0,0.1)",
+    top: "45px",
+    right: "0",
     width: "160px",
-    textAlign: "center",
+    backgroundColor: "white",
+    border: "1px solid #e5e7eb",
+    borderRadius: "8px",
+    boxShadow: "0 4px 12px rgba(0,0,0,0.1)",
+    padding: "10px",
+    zIndex: 1000,
   },
 
-  userName: {
+  username: {
+    margin: 0,
     fontSize: "14px",
-    marginBottom: "8px",
-    color: "#333",
+    fontWeight: "bold",
   },
 
   logoutBtn: {
-    padding: "6px 10px",
+    width: "100%",
+    padding: "6px",
+    marginTop: "5px",
     border: "none",
-    borderRadius: "4px",
-    cursor: "pointer",
+    borderRadius: "5px",
     backgroundColor: "#ef4444",
     color: "white",
-    width: "100%",
-  },
-
-  button: {
-    padding: "8px 14px",
-    border: "1px solid #1e3a8a",
-    borderRadius: "6px",
     cursor: "pointer",
-    backgroundColor: "white",
-    color: "#1e3a8a",
-    fontWeight: "500",
   },
 };
