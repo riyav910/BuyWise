@@ -36,6 +36,62 @@ class ItemRequest(BaseModel):
 
 
 # =========================
+# 🧠 USER AUTHENTICATION
+# =========================
+users_db = {}
+
+
+@app.post("/signup")
+def signup(data: dict):
+    name = data.get("name")
+    email = data.get("email", "").strip().lower()
+    password = data.get("password")
+
+    if not email or not password:
+        return {"status": "failed", "message": "Email and password are required"}
+
+    if email in users_db:
+        return {"status": "failed", "message": "User already exists"}
+
+    users_db[email] = {
+        "name": name or email.split("@")[0],
+        "email": email,
+        "password": password,
+    }
+
+    return {
+        "status": "success",
+        "message": "Account created successfully",
+        "user": {
+            "name": users_db[email]["name"],
+            "email": email,
+        },
+    }
+
+
+@app.post("/login")
+def login(data: dict):
+    email = data.get("email", "").strip().lower()
+    password = data.get("password")
+
+    user = users_db.get(email)
+
+    if not user:
+        return {"status": "failed", "message": "User not found"}
+
+    if user["password"] != password:
+        return {"status": "failed", "message": "Invalid credentials"}
+
+    return {
+        "status": "success",
+        "user": {
+            "name": user["name"],
+            "email": user["email"],
+        },
+    }
+
+
+# =========================
 # MAIN API
 # =========================
 
