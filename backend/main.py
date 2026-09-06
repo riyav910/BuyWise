@@ -14,7 +14,9 @@ app = FastAPI()
 app.include_router(ocr_router)
 
 if sys.platform == "win32":
-    asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+    asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
 
 try:
     print("Redis ping:", r.ping())
@@ -35,9 +37,9 @@ class ItemRequest(BaseModel):
     items: list[str]
 
 
-# =========================
-# 🧠 USER AUTHENTICATION
-# =========================
+#=========================
+# USER AUTHENTICATION
+#=========================
 users_db = {}
 
 
@@ -115,7 +117,7 @@ async def compare_prices(request: ItemRequest):
                 print(f"Redis ZSET log error: {e}")
 
             # 2. Fetch product data (runs parallel scrapers, using cache if hit)
-            data = await fetch_product_data(cleaned_item, bypass_cache=False, headless=True)
+            data = await fetch_product_data(cleaned_item, bypass_cache=False, headless=False)
 
             if data:
                 results.extend(data)
