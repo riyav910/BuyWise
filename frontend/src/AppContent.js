@@ -1,9 +1,6 @@
-import { useState, useEffect, useRef } from "react";
-import axios from "axios";
-import "./App.css";
-import HomePage from "./HomePage";
-import ComparePage from "./ComparePage";
-const COLORS = {
+import { useEffect, useRef, useState } from "react";
+
+export const COLORS = {
   green: "#1a3a2a",
   greenLight: "#4ade80",
   greenMid: "#16a34a",
@@ -25,7 +22,7 @@ const COLORS = {
   greenPale: "#d1fae5",
 };
 
-const PLATFORM_META = {
+export const PLATFORM_META = {
   blinkit: {
     id: "blinkit",
     name: "Blinkit",
@@ -64,7 +61,7 @@ const PLATFORM_META = {
   },
 };
 
-const relatedProducts = [
+export const relatedProducts = [
   { emoji: "🥛", name: "Amul Gold Milk 500ml", save: "Save ₹8", best: "₹28", url: "https://blinkit.com/s/?q=amul+gold+milk+500ml", platform: "Blinkit" },
   { emoji: "🍵", name: "Tata Tea Premium 500g", save: "Save ₹22", best: "₹188", url: "https://blinkit.com/s/?q=tata+tea+premium+500g", platform: "Blinkit" },
   { emoji: "🍪", name: "Parle-G Biscuits 800g", save: "Save ₹15", best: "₹75", url: "https://blinkit.com/s/?q=parle+g+biscuits", platform: "Blinkit" },
@@ -73,14 +70,14 @@ const relatedProducts = [
   { emoji: "🍊", name: "Tropicana OJ 1L", save: "Save ₹29", best: "₹90", url: "https://blinkit.com/s/?q=tropicana+orange+juice+1l", platform: "Blinkit" },
 ];
 
-const mlInsights = [
+export const mlInsights = [
   "Blinkit consistently prices Nestle products 15–25% lower — model confidence 87%",
   "Maggi 12-pack dropped ₹18 on Blinkit in the last 7 days — downtrend detected",
   "Swiggy Instamart shows low stock — price may rise within 24–48 hours",
   "Optimal buy window: now (festival season discount active, ~3 days remaining)",
 ];
 
-const FEATURES = [
+export const FEATURES = [
   {
     icon: "⚡",
     title: "Real-time price comparison",
@@ -111,20 +108,21 @@ const FEATURES = [
   },
 ];
 
-const STATS = [
+export const STATS = [
   { value: "3", label: "Platforms tracked" },
   { value: "50K+", label: "Products indexed" },
   { value: "87%", label: "ML model accuracy" },
   { value: "< 2 min", label: "Price refresh rate" },
 ];
 
-const PLATFORMS = [
+export const PLATFORMS = [
   { name: "Blinkit", initial: "B", color: COLORS.blinkit, bg: "#fffbea" },
   { name: "Zepto", initial: "Z", color: COLORS.zepto, bg: "#f9f0fb" },
-  { name: "Swiggy", initial: "S", color: COLORS.swiggy, bg: "#fff3ef" },
+  { name: "BigBasket", initial: "BB", color: COLORS.bigbasket, bg: COLORS.bigbasketBg },
+  { name: "JioMart", initial: "J", color: COLORS.jiomart, bg: COLORS.jiomartBg },
 ];
 
-const TRENDING = [
+export const TRENDING = [
   { emoji: "🍜", name: "Maggi 12-pack", platform: "Blinkit", price: "₹108", save: "27% off" },
   { emoji: "🥛", name: "Amul Gold 500ml", platform: "Blinkit", price: "₹28", save: "Save ₹8" },
   { emoji: "🍵", name: "Tata Tea 500g", platform: "Blinkit", price: "₹188", save: "Save ₹22" },
@@ -133,11 +131,11 @@ const TRENDING = [
   { emoji: "🍊", name: "Tropicana OJ 1L", platform: "Blinkit", price: "₹90", save: "Save ₹29" },
 ];
 
-function Badge({ children, variant = "default" }) {
+export function Badge({ children, variant = "default" }) {
   return <span className={`app-badge app-badge--${variant}`}>{children}</span>;
 }
 
-function PlatformCard({ item, index }) {
+export function PlatformCard({ item }) {
   const total = item.price + item.delivery;
   const pillClass = `app-platform-card-pill app-platform-card-pill--${item.id}`;
   const buttonClass = `app-platform-card-button app-platform-card-button--${item.id}`;
@@ -186,7 +184,7 @@ function PlatformCard({ item, index }) {
   );
 }
 
-function BarRow({ label, price, maxPrice, color }) {
+export function BarRow({ label, price, maxPrice, color }) {
   const pct = Math.max(8, Math.round((price / maxPrice) * 100));
   return (
     <div className="app-bar-row">
@@ -199,7 +197,7 @@ function BarRow({ label, price, maxPrice, color }) {
   );
 }
 
-function RelatedCard({ p }) {
+export function RelatedCard({ p }) {
   return (
     <a href={p.url} target="_blank" rel="noopener noreferrer" className="app-related-card">
       <span className="app-related-emoji">{p.emoji}</span>
@@ -210,7 +208,7 @@ function RelatedCard({ p }) {
   );
 }
 
-function AnimatedCounter({ target, suffix = "" }) {
+export function AnimatedCounter({ target, suffix = "" }) {
   const [count, setCount] = useState(0);
   const ref = useRef(null);
   const started = useRef(false);
@@ -244,120 +242,4 @@ function AnimatedCounter({ target, suffix = "" }) {
 
   const isText = isNaN(parseFloat(target));
   return <span ref={ref}>{isText ? target : `${count}${suffix}`}</span>;
-}
-
-
-
-
-export default function App() {
-  const [page, setPage] = useState("home");
-  const [input, setInput] = useState("");
-  const [result, setResult] = useState(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
-
-  const handleCompare = async (queryOverride) => {
-    const query = (queryOverride ?? input).trim();
-    if (!query) {
-      setError("Please enter one or more items separated by commas.");
-      return;
-    }
-
-    setInput(query);
-    setError("");
-    setLoading(true);
-    setPage("compare");
-
-    try {
-      const items = query.split(",").map((item) => item.trim()).filter(Boolean);
-      const res = await axios.post("http://127.0.0.1:8000/compare", { items });
-      const data = res.data;
-      if (data.error || data.message) {
-        setError(data.error || data.message || "No results found.");
-        setResult(null);
-      } else {
-        setResult(data);
-      }
-    } catch (err) {
-      console.error(err);
-      setError("Unable to fetch comparison. Is the backend running?");
-      setResult(null);
-    }
-
-    setLoading(false);
-  };
-
-  const handleNavigate = (target, query) => {
-    if (target === "compare" || target === "search") {
-      setPage("compare");
-      if (query?.trim()) {
-        handleCompare(query);
-      }
-      return;
-    }
-
-    if (target === "home") {
-      setPage("home");
-    }
-  };
-
-  if (page === "home") {
-    return <HomePage onNavigate={handleNavigate} />;
-  }
-
-  const platforms = result?.all?.map((item) => {
-    const platformKey = (item.platform || "").toLowerCase();
-    const meta = PLATFORM_META[platformKey] || {
-      id: platformKey || "unknown",
-      name: item.platform || "Platform",
-      initial: (item.platform || "?").slice(0, 2).toUpperCase(),
-      color: COLORS.muted,
-      bg: COLORS.bg,
-      btnColor: COLORS.muted,
-      searchBase: "",
-    };
-
-    const productName = item.product_name || item.name || "Product";
-    const price = item.price ?? 0;
-    const delivery = item.delivery ?? 0;
-    const best = result?.best?.platform?.toLowerCase() === platformKey;
-    const deliveryLabel = delivery === 0 ? "Free delivery" : `₹${delivery} delivery`;
-    const stockChip = platformKey === "blinkit" ? "good" : platformKey === "swiggy" ? "warn" : "neutral";
-    const stockText = platformKey === "swiggy" ? "Low stock" : "In stock";
-    const timeLabel = item.eta ? `${item.eta} min` : "—";
-    const original = Math.max(price, item.original ?? price);
-
-    return {
-      ...meta,
-      platformLabel: meta.name,
-      product_name: productName,
-      price,
-      original,
-      discount: original > price ? Math.round(((original - price) / original) * 100) : 0,
-      delivery,
-      deliveryLabel,
-      deliveryChip: delivery === 0 ? "good" : stockChip,
-      time: timeLabel,
-      stock: stockText,
-      stockChip,
-      best,
-      searchUrl: meta.searchBase,
-    };
-  }) || [];
-
-  const maxTotal = Math.max(1, ...platforms.map((item) => item.price + item.delivery));
-
-  return (
-    <ComparePage
-      input={input}
-      setInput={setInput}
-      handleCompare={handleCompare}
-      loading={loading}
-      error={error}
-      result={result}
-      platforms={platforms}
-      maxTotal={maxTotal}
-      onNavigate={handleNavigate}
-    />
-  );
 }
