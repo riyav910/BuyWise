@@ -22,12 +22,12 @@ def extract_quantity(text):
     return value
 
 
-async def scrape_bigbasket(product_name):
+async def scrape_bigbasket(product_name, headless=True):
     print(f"\n🕸️ [SCRAPER] Starting for: {product_name}")
 
     async with async_playwright() as p:
         print("🌐 Launching browser...")
-        browser = await p.chromium.launch(headless=False)
+        browser = await p.chromium.launch(headless=headless)
 
         page = await browser.new_page()
         print("📄 Opening page...")
@@ -122,7 +122,7 @@ async def scrape_bigbasket(product_name):
                 "eta": 15
             }
 
-        print("❌ No valid products found")
+        print("❌ No valid products found bb")
         return {}
     
 async def main():
@@ -150,7 +150,7 @@ async def main():
             print(f"Delivery   : ₹{result.get('delivery')}")
             print(f"ETA        : {result.get('eta')} mins")
         else:
-            print("❌ No result returned")
+            print("❌ No result returned bb")
 
     except Exception as e:
         print(f"ERROR in main(): {e}")

@@ -25,10 +25,39 @@ function App() {
     setLoading(false);
   };
 
+  const handleImageUpload = async (e) => {
+  const file = e.target.files[0];
+
+  if (!file) return;
+
+  const formData = new FormData();
+  formData.append("file", file);
+
+  try {
+    const res = await axios.post(
+      "http://127.0.0.1:8000/parse-image",
+      formData,
+      {
+        headers: {
+          "Content-Type": "multipart/form-data",
+        },
+      }
+    );
+
+    console.log("OCR items:", res.data.items);
+
+    // auto-fill input box
+    setInput(res.data.items.join(", "));
+  } catch (err) {
+    console.error(err);
+    alert("OCR failed");
+  }
+};
+
   return (
     <div style={styles.container}>
-      <h1 style={styles.title}>🛒 BuyWise</h1>
-
+      <h1 style={styles.title}> BuyWise</h1>
+      {/* <input type="file" accept="image/*" onChange={handleImageUpload} /> */}
       <div style={styles.inputBox}>
         <input
           style={styles.input}
@@ -54,18 +83,18 @@ function App() {
                 {item.platform.toUpperCase()}
               </h3>
 
-              <p>📦 Product: {item.product_name}</p>
-              <p>💰 Price: ₹{item.price}</p>
-              <p>📏 Quantity: {item.quantity} ml/g</p>
-              <p>⚖️ Unit Price: ₹{item.unit_price?.toFixed(4)}</p>
-              <p>🚚 Delivery: ₹{item.delivery}</p>
-              <p>⏱ ETA: {item.eta} mins</p>
+              <p>Product: {item.product_name}</p>
+              <p>Price: ₹{item.price}</p>
+              <p>Quantity: {item.quantity} ml/g</p>
+              <p>Unit Price: ₹{item.unit_price?.toFixed(4)}</p>
+              <p>Delivery: ₹{item.delivery}</p>
+              <p>ETA: {item.eta} mins</p>
             </div>
           ))}
 
-          {/* 🔥 BEST PLATFORM */}
+          {/* BEST PLATFORM */}
           <div style={styles.bestCard}>
-            <h2>🏆 Best Deal</h2>
+            <h2>Best Deal</h2>
             <p><b>{result.best.platform.toUpperCase()}</b></p>
             <p>Product: {result.best.product_name}</p>
             <p>Unit Price: ₹{result.best.unit_price?.toFixed(4)}</p>

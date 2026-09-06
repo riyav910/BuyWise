@@ -5,29 +5,58 @@ import json
 
 
 def extract_quantity(text):
+    if not text:
+        return None, None
+
     text = text.lower()
 
-    match = re.search(r"(\d+)\s?(ml|l|g|kg)", text)
+    #1. Handle "<1000g"
+    match = re.search(r"(\d+)\s?(g|kg|ml|l)\s?or\s?(\d+)", text)
+    if match:
+        val1 = int(match.group(1))
+        val2 = int(match.group(3))
+        unit = match.group(2)
 
-    if not match:
-        return None
+        value = min(val1, val2)
 
-    value = int(match.group(1))
-    unit = match.group(2)
+        if unit == "kg":
+            value *= 1000
+            unit = "g"
+        elif unit == "l":
+            value *= 1000
+            unit = "ml"
 
-    if unit == "l":
-        value *= 1000
-    elif unit == "kg":
-        value *= 1000
+        return value, unit
 
-    return value
+    #2. Handle NORMAL case
+    match = re.search(r"(\d+)\s?(g|kg|ml|l)", text)
+    if match:
+        value = int(match.group(1))
+        unit = match.group(2)
+
+        if unit == "kg":
+            value *= 1000
+            unit = "g"
+        elif unit == "l":
+            value *= 1000
+            unit = "ml"
+
+        return value, unit
+
+    #3. Handle count
+    match = re.search(r"(\d+)\s?(pcs|pieces|units)", text)
+    if match:
+        return int(match.group(1)), "count"
+
+    #4. Fallback
+    return 1, "unit"
 
 
-async def scrape_zepto(product_name):
+async def scrape_zepto(product_name, headless=True):
     print(f"\n[ZEPTO] Starting for: {product_name}")
 
     async with async_playwright() as p:
-        browser = await p.chromium.launch(headless=False)
+        browser = await p.chromium.launch(headless=headless)
         page = await browser.new_page()
 
         print("Opening Zepto...")
@@ -65,8 +94,16 @@ async def scrape_zepto(product_name):
                 if not name or not price_value or not quantity:
                     continue
 
-                if product_name.lower() not in name.lower():
+                keywords = product_name.lower().split()
+
+                if not any(k in name.lower() for k in keywords):
                     continue
+
+                quantity, unit = extract_quantity(qty_text)
+
+                if not quantity:
+                    quantity = 1
+                    unit = "unit"
 
                 unit_price = price_value / quantity
 
@@ -76,7 +113,8 @@ async def scrape_zepto(product_name):
                     "name": name,
                     "price": price_value,
                     "quantity": quantity,
-                    "unit_price": unit_price
+                    "unit_price": unit_price,
+                    "unit": unit
                 })
 
             except Exception as e:
@@ -94,35 +132,66 @@ async def scrape_zepto(product_name):
                 "product_name": best_product["name"],
                 "price": best_product["price"],
                 "qty": best_product["quantity"],
+                "unit": unit,
                 "delivery": 10,
                 "eta": 10
             }
 
-        print(" No valid products found")
+        print(" No valid products found zepto")
         return {}
 
 
 # ─────────────────────────────────────────
 # ENTRY POINT
 # ─────────────────────────────────────────
+import json
+import traceback
+
 async def main():
     product = input("Enter product name (default: milk): ").strip() or "milk"
 
-    result = await scrape_zepto(product)
+    try:
+        print(f"\nRunning scraper for: {product}")
 
-    print("\n" + "=" * 40)
-    print("FINAL RESULT")
-    print("=" * 40)
+        result = await scrape_zepto(product)
 
-    if result:
+        print("\n" + "=" * 40)
+        print("FINAL RESULT")
+        print("=" * 40)
+
+        # Case 1: result is None
+        if result is None:
+            print("Result is None (scraper returned nothing)")
+            return
+
+        # Case 2: empty dict
+        if not result:
+            print("Empty result returned {}")
+            return
+
+        # Case 3: missing expected keys
+        if "platform" not in result:
+            print("Unexpected result structure:")
+            print(json.dumps(result, indent=2))
+            return
+
+        # Normal case
         print(json.dumps(
             {k: v for k, v in result.items() if k != "all_products"},
             indent=2,
             ensure_ascii=False
         ))
-        print(f"\n(+ {len(result.get('all_products', []))} total products in result['all_products'])")
-    else:
-        print("No result returned.")
+
+        print(f"\n(+ {len(result.get('all_products', []))} total products)")
+
+    except Exception as e:
+        print("\nERROR OCCURRED")
+        print("=" * 40)
+
+        print("Error message:", str(e))
+
+        print("\nFull traceback:")
+        traceback.print_exc()
 
 
 if __name__ == "__main__":

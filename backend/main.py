@@ -1,19 +1,17 @@
-from fastapi import FastAPI
-from pydantic import BaseModel
-from fastapi.middleware.cors import CORSMiddleware
-import json
 import asyncio
 import sys
+import time
+from fastapi import FastAPI, HTTPException
+from pydantic import BaseModel
+from fastapi.middleware.cors import CORSMiddleware
 
-from redis_client import r  # ✅ use ONLY this
-
-from scrapers.bigbasket import scrape_bigbasket
-from scrapers.blinkit import scrape_blinkit
-from scrapers.zepto import scrape_zepto
-from scrapers.jiomart import scrape_jiomart
-from compare import compare_products
+from ocr_endpoint import router as ocr_router
+from scraper_service import r, fetch_product_data
+from compare import compare_products, optimize_cart_inr
 
 app = FastAPI()
+
+app.include_router(ocr_router)
 
 if sys.platform == "win32":
     asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
@@ -23,12 +21,7 @@ try:
 except Exception as e:
     print("Redis connection failed:", e)
 
-# if sys.platform == "win32":
-#     asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
-#     loop = asyncio.new_event_loop()
-#     asyncio.set_event_loop(loop)
-
-#  CORS
+# CORS
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -43,92 +36,6 @@ class ItemRequest(BaseModel):
 
 
 # =========================
-# CACHE FUNCTIONS
-# =========================
-
-def get_cached_product(product_name):
-    product_name = product_name.lower().strip()
-    print(f"\nChecking cache for: {product_name}")
-
-    try:
-        data = r.get(product_name)
-
-        if data:
-            print(f"CACHE HIT: {product_name}")
-            return json.loads(data)
-
-        print(f"CACHE MISS: {product_name}")
-        return None
-
-    except Exception as e:
-        print(f"Redis GET error: {e}")
-        return None
-
-
-def set_cache(product_name, data):
-    product_name = product_name.lower().strip()
-    print(f"Storing in cache: {product_name}")
-    try:
-        r.setex(product_name, 3600, json.dumps(data))
-        print(f"TTL set to 3600 seconds")
-        print(f"Cached data: {data}")
-
-    except Exception as e:
-        print(f"Redis SET error: {e}")
-
-
-# =========================
-# FETCH LOGIC
-# =========================
-
-async def fetch_product_data(product_name):
-    product_name = product_name.lower().strip()
-    print(f"\nProcessing item: {product_name}")
-
-    # Cache check
-    cached = get_cached_product(product_name)
-    if cached:
-        print(f"Returning cached data for: {product_name}")
-        return cached
-
-    print(f"Initiating scraping for: {product_name}")
-
-    try:
-        # Run ALL scrapers in parallel
-        responses = await asyncio.gather(
-            scrape_bigbasket(product_name),
-            scrape_blinkit(product_name),
-            scrape_zepto(product_name),
-            scrape_jiomart(product_name),
-            return_exceptions=True
-        )
-
-        valid_results = []
-
-        for res in responses:
-            if isinstance(res, Exception):
-                print(f"Scraper failed: {res}")
-                continue
-
-            if res:
-                valid_results.append(res)
-
-        if not valid_results:
-            raise Exception("All scrapers failed")
-
-    except Exception as e:
-        print(f"SCRAPER ERROR: {e}")
-
-        # No fake fallback — return empty cleanly
-        return []
-
-    # Cache store (store LIST of results)
-    set_cache(product_name, valid_results)
-
-    return valid_results
-
-
-# =========================
 # MAIN API
 # =========================
 
@@ -138,10 +45,21 @@ async def compare_prices(request: ItemRequest):
         results = []
 
         for item in request.items:
-            print(f"\nProcessing: {item}")
+            cleaned_item = item.lower().strip()
+            if not cleaned_item:
+                continue
 
-            # Run all scrapers in parallel
-            data = await fetch_product_data(item)
+            print(f"\nProcessing: {cleaned_item}")
+
+            # 1. Record search/order query in Redis ZSET
+            try:
+                r.zadd("recent_queries", {cleaned_item: time.time()})
+                r.zremrangebyrank("recent_queries", 0, -101)  # Limit to 100 items
+            except Exception as e:
+                print(f"Redis ZSET log error: {e}")
+
+            # 2. Fetch product data (runs parallel scrapers, using cache if hit)
+            data = await fetch_product_data(cleaned_item, bypass_cache=False, headless=True)
 
             if data:
                 results.extend(data)
@@ -150,6 +68,10 @@ async def compare_prices(request: ItemRequest):
             return {"message": "No data found"}
 
         final = compare_products(results)
+        
+        # Calculate optimized cart values in INR
+        optimized = optimize_cart_inr(results, request.items)
+        final["optimized"] = optimized
 
         return final
 

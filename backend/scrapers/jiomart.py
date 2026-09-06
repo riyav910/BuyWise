@@ -23,11 +23,11 @@ def extract_quantity(text):
     return value
 
 
-async def scrape_jiomart(product_name):
+async def scrape_jiomart(product_name, headless=True):
     print(f"\n🛒 [JIOMART] Starting for: {product_name}")
 
     async with async_playwright() as p:
-        browser = await p.chromium.launch(headless=False)
+        browser = await p.chromium.launch(headless=headless)
         page = await browser.new_page()
 
         print("🌐 Opening JioMart...")
@@ -101,7 +101,7 @@ async def scrape_jiomart(product_name):
                 "eta": 20
             }
 
-        print("❌ No valid products found")
+        print("❌ No valid products found jiomart")
         return {}
     
 async def main():

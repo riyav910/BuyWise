@@ -22,11 +22,11 @@ def extract_quantity(text):
     return value
 
 
-async def scrape_blinkit(product_name):
+async def scrape_blinkit(product_name, headless=True):
     print(f"\n[BLINKIT] Starting for: {product_name}")
 
     async with async_playwright() as p:
-        browser = await p.chromium.launch(headless=False)
+        browser = await p.chromium.launch(headless=headless)
         page = await browser.new_page()
 
         print(" Opening Blinkit...")
@@ -122,7 +122,7 @@ async def scrape_blinkit(product_name):
                 "eta": 10
             }
 
-        print("❌ No valid products found")
+        print("❌ No valid products found blinkit")
         return {}
     
 async def main():

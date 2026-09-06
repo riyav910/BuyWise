@@ -3,3 +3,7 @@ uvicorn
 redis
 asyncio 
 playwright
+pytesseract 
+pillow
+python-multipart
+opencv-python
