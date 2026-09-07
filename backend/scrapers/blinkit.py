@@ -4,18 +4,26 @@ import re
 
 
 def extract_quantity(text):
+
+    if not text:
+        return None
+
     text = text.lower()
 
-    match = re.search(r"(\d+)\s?(ml|l|g|kg)", text)
+    match = re.search(
+        r"(\d+(?:\.\d+)?)\s?(ml|l|g|kg)",
+        text
+    )
 
     if not match:
         return None
 
-    value = int(match.group(1))
+    value = float(match.group(1))
     unit = match.group(2)
 
     if unit == "l":
         value *= 1000
+
     elif unit == "kg":
         value *= 1000
 
@@ -23,139 +31,224 @@ def extract_quantity(text):
 
 
 async def scrape_blinkit(product_name, headless=True):
-    print(f"\n[BLINKIT] Starting for: {product_name}")
 
     async with async_playwright() as p:
-        browser = await p.chromium.launch(headless=headless)
+
+        browser = await p.chromium.launch(
+            headless=headless
+        )
+
         page = await browser.new_page()
 
-        print(" Opening Blinkit...")
+        try:
 
-        await page.goto(f"https://blinkit.com/s/?q={product_name}")
+            await page.goto(
+                f"https://blinkit.com/s/?q={product_name}",
+                wait_until="domcontentloaded",
+                timeout=60000
+            )
 
-        print(" Waiting for products...")
+            await page.wait_for_selector(
+                "text=₹",
+                timeout=20000
+            )
 
-        await page.wait_for_selector("text=₹", timeout=20000)
-        await asyncio.sleep(3)
+            await asyncio.sleep(3)
 
-        print(" Finding price elements...")
+            price_elements = await page.query_selector_all(
+                "text=₹"
+            )
 
-        price_elements = await page.query_selector_all("text=₹")
+            extracted_products = []
 
-        print(f"Found {len(price_elements)} price elements")
+            for price_el in price_elements[:25]:
 
-        extracted_products = []
+                try:
 
-        for price_el in price_elements[:25]:
-            try:
-                price_text = await price_el.inner_text()
-                price_value = float(re.sub(r"[^\d.]", "", price_text))
+                    price_text = await price_el.inner_text()
 
-                #  climb up to product card
-                parent = await price_el.evaluate_handle(
-                    """el => {
-                        let node = el;
-                        for (let i = 0; i < 6; i++) {
-                            if (!node) break;
-                            if (node.innerText && node.innerText.length > 50) return node;
-                            node = node.parentElement;
-                        }
-                        return el.parentElement;
-                    }"""
+                    price_value = float(
+                        re.sub(
+                            r"[^\d.]",
+                            "",
+                            price_text
+                        )
+                    )
+
+                    parent = await price_el.evaluate_handle(
+                        """el => {
+                            let node = el;
+
+                            for (let i = 0; i < 6; i++) {
+
+                                if (!node)
+                                    break;
+
+                                if (
+                                    node.innerText &&
+                                    node.innerText.length > 50
+                                )
+                                    return node;
+
+                                node = node.parentElement;
+                            }
+
+                            return el.parentElement;
+                        }"""
+                    )
+
+                    parent_text = await parent.inner_text()
+
+                    if (
+                        product_name.lower()
+                        not in parent_text.lower()
+                    ):
+                        continue
+
+                    lines = [
+                        l.strip()
+                        for l in parent_text.split("\n")
+                        if l.strip()
+                    ]
+
+                    name = None
+                    quantity = None
+
+                    for line in lines:
+
+                        qty = extract_quantity(line)
+
+                        if qty:
+                            quantity = qty
+
+                        if (
+                            len(line) > 5
+                            and "₹" not in line
+                            and not re.search(
+                                r"\d+\s?(ml|l|g|kg)",
+                                line.lower()
+                            )
+                            and not any(
+                                x in line.lower()
+                                for x in [
+                                    "add",
+                                    "mins",
+                                    "off",
+                                    "%"
+                                ]
+                            )
+                        ):
+                            name = line
+
+                    if not name or not quantity:
+                        continue
+
+                    unit_price = (
+                        price_value / quantity
+                    )
+
+                    extracted_products.append({
+                        "name": name,
+                        "price": price_value,
+                        "quantity": quantity,
+                        "unit_price": unit_price
+                    })
+
+                except Exception:
+                    continue
+
+            if extracted_products:
+
+                best_product = min(
+                    extracted_products,
+                    key=lambda x: x["unit_price"]
                 )
 
-                parent_text = await parent.inner_text()
+                return {
+                    "platform": "blinkit",
+                    "product_name": best_product["name"],
+                    "price": best_product["price"],
+                    "qty": best_product["quantity"],
+                    "unit_price": best_product["unit_price"],
+                    "delivery": 10,
+                    "eta": 10,
+                    "all_products": extracted_products
+                }
 
-                if product_name.lower() not in parent_text.lower():
-                    continue
+            return {}
 
-                lines = [l.strip() for l in parent_text.split("\n") if l.strip()]
+        finally:
+            await browser.close()
 
-                name = None
-                quantity = None
 
-                for line in lines:
-                    # quantity detection
-                    qty = extract_quantity(line)
-                    if qty:
-                        quantity = qty
-
-                    # name detection
-                    if (
-                        len(line) > 5 and
-                        "₹" not in line and
-                        not re.search(r"\d+\s?(ml|l|g|kg)", line.lower()) and
-                        not any(x in line.lower() for x in ["add", "mins", "off", "%"])
-                    ):
-                        name = line
-
-                if not name or not quantity:
-                    continue
-
-                unit_price = price_value / quantity
-
-                print(f"{name} → ₹{price_value} | {quantity}")
-
-                extracted_products.append({
-                    "name": name,
-                    "price": price_value,
-                    "quantity": quantity,
-                    "unit_price": unit_price
-                })
-
-            except Exception as e:
-                print(f" Error: {e}")
-
-        await browser.close()
-
-        if extracted_products:
-            best_product = min(extracted_products, key=lambda x: x["unit_price"])
-
-            print(f"\nSelected: {best_product}")
-
-            return {
-                "platform": "blinkit",
-                "product_name": best_product["name"],
-                "price": best_product["price"],
-                "qty": best_product["quantity"],
-                "delivery": 10,
-                "eta": 10
-            }
-
-        print("❌ No valid products found blinkit")
-        return {}
-    
 async def main():
-    print("\n🚀 Testing Blinkit Scraper...\n")
 
-    # You can change this or keep input
-    product = input("Enter product (default: milk): ").strip()
-    if not product:
-        product = "milk"
+    product = (
+        input("\n  Product (default: milk): ")
+        .strip()
+        or "milk"
+    )
 
-    print(f"\nSearching for: {product}")
+    print("\n╭────────────────────────────────────────────╮")
+    print("│                BLINKIT                    │")
+    print("╰────────────────────────────────────────────╯")
+
+    print(f"\n  Searching : {product}")
 
     try:
+
         result = await scrape_blinkit(product)
 
-        print("\n============================")
-        print("FINAL RESULT")
-        print("============================")
+        print()
 
-        if result:
-            print(f"Platform   : {result.get('platform')}")
-            print(f"Product    : {result.get('product_name')}")
-            print(f"Price      : ₹{result.get('price')}")
-            print(f"Quantity   : {result.get('qty')}")
-            print(f"Delivery   : ₹{result.get('delivery')}")
-            print(f"ETA        : {result.get('eta')} mins")
-        else:
-            print("No result returned")
+        if not result:
+
+            print("  ✗ No valid products found")
+            print()
+
+            return
+
+        products = result.get(
+            "all_products",
+            []
+        )
+
+        print(
+            f"  ✓ Products found : {len(products)}"
+        )
+
+        print("\n  BEST MATCH")
+        print("  ──────────────────────────────────────────")
+
+        print(
+            f"  {result['product_name']}"
+        )
+
+        print(
+            f"  ₹{result['price']:.0f}  •  "
+            f"{result['qty']}  •  "
+            f"₹{result['unit_price']:.4f}/unit"
+        )
+
+        print("\n  DETAILS")
+        print("  ──────────────────────────────────────────")
+
+        print(
+            f"  Delivery : ₹{result['delivery']}"
+        )
+
+        print(
+            f"  ETA      : {result['eta']} mins"
+        )
+
+        print()
 
     except Exception as e:
-        print(f"ERROR in main(): {e}")
+
+        print("\n  ✗ Scraper error")
+        print(f"    {str(e)}")
+        print()
 
 
-# RUN SCRIPT
 if __name__ == "__main__":
     asyncio.run(main())

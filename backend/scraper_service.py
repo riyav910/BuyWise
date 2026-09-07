@@ -3,10 +3,7 @@ import json
 import sys
 from redis_client import r
 
-from scrapers.bigbasket import scrape_bigbasket
-from scrapers.blinkit import scrape_blinkit
-from scrapers.zepto import scrape_zepto
-from scrapers.jiomart import scrape_jiomart
+from scrapers.scraper import scrape_all
 
 if sys.platform == "win32":
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
@@ -65,32 +62,15 @@ async def fetch_product_data(product_name, bypass_cache: bool = False, headless:
                     item["search_term"] = product_name
             return cached
 
-    print(f"Initiating scraping for: {product_name}")
+    print(f"Cache miss: Initiating scraping for: {product_name}")
 
     try:
-        # Run ALL scrapers in parallel, passing down the headless parameter
-        responses = await asyncio.gather(
-            scrape_bigbasket(product_name, headless=headless),
-            scrape_blinkit(product_name, headless=headless),
-            scrape_zepto(product_name, headless=headless),
-            scrape_jiomart(product_name, headless=headless),
-            return_exceptions=True
-        )
-
-        valid_results = []
-
-        for res in responses:
-            if isinstance(res, Exception):
-                print(f"Scraper failed with exception: {res}")
-                continue
-
-            if res:
-                if isinstance(res, dict):
-                    res["search_term"] = product_name
-                valid_results.append(res)
+        # Call main scraper that coordinates all websites
+        valid_results = await scrape_all(product_name, headless=headless)
 
         if not valid_results:
-            raise Exception("All scrapers failed")
+            print(f"No valid results returned from any platform for: {product_name}")
+            return []
 
     except Exception as e:
         print(f"SCRAPER ERROR: {e}")

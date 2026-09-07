@@ -1,56 +1,87 @@
 import asyncio
-from playwright.async_api import async_playwright
+import sys
+
+# Support running directly as script (python scrapers/scraper.py) or as imported module
+try:
+    from scrapers.bigbasket import scrape_bigbasket
+    from scrapers.blinkit import scrape_blinkit
+    from scrapers.zepto import scrape_zepto
+    from scrapers.jiomart import scrape_jiomart
+    from scrapers.instamart import scrape_instamart
+except ImportError:
+    from bigbasket import scrape_bigbasket
+    from blinkit import scrape_blinkit
+    from zepto import scrape_zepto
+    from jiomart import scrape_jiomart
+    from instamart import scrape_instamart
+
+if sys.platform == "win32":
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+    asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
 
 
-async def scrape_product(product_name):
-    print(f"\n🕸️ [SCRAPER] Starting for: {product_name}")
+async def scrape_all_platforms(product_name: str, headless: bool = True) -> list[dict]:
+    """
+    Main scraper coordinator.
+    Scrapes all platforms in parallel with the given headless configuration.
+    Returns a list of valid scraped product results.
+    No outside module should call individual platform scrapers directly.
+    """
+    product_name = product_name.lower().strip()
+    print(f"\n[MAIN SCRAPER] Initiating scrape for: '{product_name}' (headless={headless})")
 
-    async with async_playwright() as p:
-        print("🌐 Launching browser...")
-        browser = await p.chromium.launch(headless=False)
+    scraper_tasks = [
+        ("BigBasket", scrape_bigbasket(product_name, headless=headless)),
+        ("Blinkit", scrape_blinkit(product_name, headless=headless)),
+        ("Zepto", scrape_zepto(product_name, headless=headless)),
+        ("JioMart", scrape_jiomart(product_name, headless=headless)),
+        ("Instamart", scrape_instamart(product_name, headless=headless)),
+    ]
 
-        page = await browser.new_page()
+    names = [name for name, _ in scraper_tasks]
+    coroutines = [coro for _, coro in scraper_tasks]
 
-        # 🔥 IMPORTANT: open website
-        url = f"https://www.bigbasket.com/ps/?q={product_name}"
-        await page.goto(url)
+    responses = await asyncio.gather(*coroutines, return_exceptions=True)
 
-        # Wait for price element
-        await page.wait_for_selector("text=₹")
+    valid_results = []
 
-        # Get product name
-        try:
-            name_element = await page.query_selector("h3")
-            name = await name_element.inner_text()
-        except:
-            name = product_name
+    for name, res in zip(names, responses):
+        if isinstance(res, Exception):
+            print(f"[{name}] Failed with error: {res}")
+            continue
 
-        # Get price
-        price_element = await page.query_selector("text=₹")
-        price_text = await price_element.inner_text()
+        if isinstance(res, dict) and res.get("platform") and res.get("price") is not None:
+            res["search_term"] = product_name
+            print(f"[{name}] Found: {res.get('product_name')} - Rs {res.get('price')}")
+            valid_results.append(res)
+        else:
+            print(f"[{name}] No valid product found.")
 
-        print(f"🛒 Product: {name}")
-        print(f"💰 Price raw: {price_text}")
+    print(f"[MAIN SCRAPER] Finished '{product_name}'. Platforms found: {len(valid_results)}/{len(scraper_tasks)}")
+    return valid_results
 
-        # Extract number
-        digits = ''.join(filter(str.isdigit, price_text))
-        price_value = int(digits) if digits else 50
 
-        extracted_products = []
+# Aliases for flexibility and backwards compatibility
+scrape_all = scrape_all_platforms
+scrape_product = scrape_all_platforms
 
-        if price_value:
-            extracted_products.append({
-                "name": name,
-                "price": price_value
-            })
 
-        await browser.close()
-        print("❌ Browser closed")
+# Entry point for direct testing
+async def main():
+    product = input("Enter product to compare (default: milk): ").strip() or "milk"
+    headless_choice = input("Run headless? (y/n, default: y): ").strip().lower()
+    headless = headless_choice != "n"
 
-        return {
-            "bigbasket": {
-                "price": price_value,
-                "delivery": 30,
-                "eta": 20
-            }
-        }
+    print(f"\nRunning main scraper for: '{product}' (headless={headless})")
+    results = await scrape_all(product, headless=headless)
+
+    print("\n============================")
+    print(f"FINAL RESULTS ({len(results)} platforms)")
+    print("============================")
+    for r in results:
+        print(f"Platform: {r.get('platform', 'N/A'):<12} | Price: Rs {r.get('price', 'N/A'):<6} | Qty: {r.get('qty', 'N/A')} | Delivery: Rs {r.get('delivery', 'N/A')} | Product: {r.get('product_name', 'N/A')}")
+
+
+if __name__ == "__main__":
+    asyncio.run(main())
