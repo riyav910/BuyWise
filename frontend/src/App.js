@@ -6,6 +6,8 @@ import "./App.css";
 // Components from branches
 import Navbar from "./components/Navbar";
 import HomePage from "./HomePage";
+import DealsPage from "./DealsPage";
+import AboutPage from "./AboutPage";
 import ComparePage from "./ComparePage";
 import LoginPage from "./pages/LoginPage";
 import CreateAccount from "./pages/CreateAccount";
@@ -84,7 +86,10 @@ function MainApp() {
       }
       return;
     }
-
+    if (target === "deals") {
+  navigate("/deals");
+  return;
+}
     if (target === "home") {
       navigate("/");
     }
@@ -128,7 +133,7 @@ function MainApp() {
         stock: stockText,
         stockChip,
         best,
-        searchUrl: meta.searchBase,
+        product_url: item.product_url,
       };
     }) || [];
 
@@ -158,6 +163,8 @@ function MainApp() {
         />
         <Route path="/login" element={<LoginPage />} />
         <Route path="/signup" element={<CreateAccount />} />
+        <Route path="/deals" element={<DealsPage onNavigate={handleNavigate} />} />
+        <Route path="/about" element={<AboutPage onNavigate={handleNavigate} />} />
       </Routes>
     </>
   );

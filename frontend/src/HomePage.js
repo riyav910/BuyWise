@@ -1,6 +1,20 @@
 import { useState, useEffect, useRef } from "react";
 import { PLATFORMS, STATS, FEATURES, TRENDING, AnimatedCounter } from "./AppContent";
 
+function useReveal() {
+  const ref = useRef(null);
+  const [visible, setVisible] = useState(false);
+  useEffect(() => {
+    const obs = new IntersectionObserver(
+      ([entry]) => entry.isIntersecting && setVisible(true),
+      { threshold: 0.15 }
+    );
+    if (ref.current) obs.observe(ref.current);
+    return () => obs.disconnect();
+  }, []);
+  return [ref, visible];
+}
+
 export default function HomePage({ onNavigate }) {
   const [searchQuery, setSearchQuery] = useState("");
   const [typedText, setTypedText] = useState("");
@@ -11,6 +25,11 @@ export default function HomePage({ onNavigate }) {
   const placeholderRef = useRef(0);
   const charRef = useRef(0);
   const deletingRef = useRef(false);
+
+  const [workflowRef, workflowVisible] = useReveal();
+  const [trendingRef, trendingVisible] = useReveal();
+  const [ctaRef, ctaVisible] = useReveal();
+  const [alertRef, alertVisible] = useReveal();
 
   useEffect(() => {
     const tick = () => {
@@ -50,23 +69,10 @@ export default function HomePage({ onNavigate }) {
   return (
     <>
       <div className="home-page">
-        <nav className="home-nav">
-          <div className="home-nav-inner">
-            <div className="home-brand">
-              Buy<span className="home-brand-accent">Wise</span>
-            </div>
-            <div className="home-nav-actions">
-              <button onClick={() => onNavigate && onNavigate("compare")} className="home-nav-button home-nav-button-secondary">
-                Compare prices
-              </button>
-              <button onClick={() => onNavigate && onNavigate("search")} className="home-nav-button home-nav-button-primary">
-                Search
-              </button>
-            </div>
-          </div>
-        </nav>
 
         <section className="home-hero-section">
+           <div className="home-hero-glow" />
+           <div className="home-hero-content"></div>
           <div className="home-hero-content">
             <div className="fade-up home-hero-tag">
               <span className="home-hero-tag-dot" />
@@ -98,6 +104,8 @@ export default function HomePage({ onNavigate }) {
               </button>
             </form>
 
+            
+
             <div className="fade-up-4 home-hero-cta">
               <button onClick={() => onNavigate && onNavigate("compare")} className="home-hero-cta-button">
                 📊 Compare prices
@@ -127,7 +135,10 @@ export default function HomePage({ onNavigate }) {
           </div>
         </section>
 
-        <section className="home-workflow-section">
+        <section
+          ref={workflowRef}
+          className={`home-workflow-section reveal ${workflowVisible ? "reveal-visible" : ""}`}
+        >
           <div className="home-workflow-title-wrap">
             <div className="home-workflow-badge">How it works</div>
             <h2 className="home-workflow-heading">Three steps to smarter shopping</h2>
@@ -166,19 +177,22 @@ export default function HomePage({ onNavigate }) {
           </div>
         </section> */}
 
-        <section className="home-trending-section">
+        <section
+          ref={trendingRef}
+          className={`home-trending-section reveal ${trendingVisible ? "reveal-visible" : ""}`}
+        >
           <div className="home-trending-header">
             <div>
               <div className="home-trending-badge">Trending now</div>
               <h2 className="home-trending-heading">Today's best deals</h2>
             </div>
-            <button onClick={() => onNavigate && onNavigate("compare")} className="home-trending-action">
+            <button onClick={() => onNavigate && onNavigate("deals")} className="home-trending-action">
               See all deals →
             </button>
           </div>
           <div className="home-trending-card">
-            {TRENDING.map((item, i) => (
-              <div key={i} className="home-trending-item" onClick={() => onNavigate && onNavigate("compare", item.name)}>
+            {TRENDING.slice(0, 4).map((item, i) => (
+              <div key={i} className="home-trending-item" onClick={() => onNavigate && onNavigate("deals")}>
                 <span className="home-trending-emoji">{item.emoji}</span>
                 <div className="home-trending-name">{item.name}</div>
                 <div className="home-trending-price">{item.price}</div>
@@ -191,7 +205,10 @@ export default function HomePage({ onNavigate }) {
           </div>
         </section>
 
-        <section className="home-cta-section">
+        <section
+          ref={ctaRef}
+          className={`home-cta-section reveal ${ctaVisible ? "reveal-visible" : ""}`}
+        >
           <div className="home-cta-card">
             <div className="home-cta-copy">
               <h2 className="home-cta-title">Ready to save on every grocery run?</h2>
@@ -209,8 +226,11 @@ export default function HomePage({ onNavigate }) {
             </div>
           </div>
         </section>
-        
-        <section className="home-alert-section">
+
+        <section
+          ref={alertRef}
+          className={`home-alert-section reveal ${alertVisible ? "reveal-visible" : ""}`}
+        >
           <div className="home-alert-wrap">
             <div className="home-alert-badge">Price alerts</div>
             <h2 className="home-alert-heading">Get notified when prices drop</h2>
