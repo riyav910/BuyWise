@@ -130,6 +130,10 @@ async def compare_prices(request: ItemRequest):
             # 2. Fetch product data (runs parallel scrapers, using cache if hit)
             try:
                 data = await fetch_product_data(item_name, bypass_cache=False, headless=False)
+                if data:
+                    for d in data:
+                        if isinstance(d, dict) and not d.get("search_term"):
+                            d["search_term"] = item_name
                 return data or []
             except Exception as e:
                 print(f"Error fetching product '{item_name}': {e}")
@@ -155,6 +159,21 @@ async def compare_prices(request: ItemRequest):
         # Calculate optimized cart values in INR across all parallel requested items
         optimized = optimize_cart_inr(results, processed_items)
         final["optimized"] = optimized
+
+        # Generate per-product comparison so frontend can display each product separately
+        by_product = {}
+        for item_name in processed_items:
+            prod_results = [
+                r for r in results 
+                if r.get("search_term", "").lower().strip() == item_name.lower().strip()
+            ]
+            if prod_results:
+                by_product[item_name] = compare_products(prod_results)
+            else:
+                by_product[item_name] = {"all": [], "best": None, "message": f"No results for {item_name}"}
+
+        final["by_product"] = by_product
+        final["items"] = processed_items
 
         return final
 
