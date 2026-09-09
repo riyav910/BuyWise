@@ -129,6 +129,12 @@ export const TRENDING = [
   { emoji: "🍪", name: "Parle-G 800g", platform: "Blinkit", price: "₹75", save: "Save ₹15" },
   { emoji: "🥜", name: "Haldirams 400g", platform: "Zepto", price: "₹98", save: "Save ₹22" },
   { emoji: "🍊", name: "Tropicana OJ 1L", platform: "Blinkit", price: "₹90", save: "Save ₹29" },
+  { emoji: "🍞", name: "Britannia Bread 400g", platform: "Zepto", price: "₹42", save: "Save ₹8" },
+  { emoji: "🧈", name: "Amul Butter 100g", platform: "BigBasket", price: "₹52", save: "Save ₹6" },
+  { emoji: "🥚", name: "Farm Eggs 12pc", platform: "JioMart", price: "₹84", save: "Save ₹11" },
+  { emoji: "🍚", name: "India Gate Basmati 1kg", platform: "BigBasket", price: "₹149", save: "18% off" },
+  { emoji: "🧴", name: "Dove Shampoo 340ml", platform: "Zepto", price: "₹279", save: "Save ₹40" },
+  { emoji: "🍫", name: "Dairy Milk 55g x5", platform: "JioMart", price: "₹150", save: "Save ₹25" },
 ];
 
 export function Badge({ children, variant = "default" }) {
@@ -185,14 +191,20 @@ export function PlatformCard({ item }) {
         <span className={item.best ? "app-platform-card-total-best" : "app-platform-card-total"}>₹{total}</span>
       </div>
 
-      <a
-        href={item.product_url || (item.searchUrl ? `${item.searchUrl}${encodeURIComponent(item.product_name)}` : "#")}
-        target="_blank"
-        rel="noopener noreferrer"
-        className={buttonClass}
-      >
-        View on {item.name}
-      </a>
+      {item.product_url || (item.searchUrl && item.product_name) ? (
+        <a
+          href={item.product_url || `${item.searchUrl}${encodeURIComponent(item.product_name)}`}
+          target="_blank"
+          rel="noopener noreferrer"
+          className={buttonClass}
+        >
+          View on {item.name}
+        </a>
+      ) : (
+        <span className={`${buttonClass} app-platform-card-button-disabled`}>
+          Link unavailable
+        </span>
+      )}
     </div>
   );
 }

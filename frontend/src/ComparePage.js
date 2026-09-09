@@ -3,29 +3,26 @@ import { Badge, relatedProducts, PlatformCard, BarRow, RelatedCard } from "./App
 export default function ComparePage({ input, setInput, handleCompare, handleImageUpload, loading, error, result, platforms, maxTotal, onNavigate }) {
   return (
     <div className="app-page">
-      <header className="app-header">
-        <div className="app-header-inner">
-          <div className="app-logo">
-            Buy<span className="app-logo-accent">Wise</span>
-          </div>
-          <div className="app-search-wrap">
-            <span className="app-search-icon">🔍</span>
-            <input
-              className="app-search-input"
-              placeholder="Compare products across platforms"
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-            />
-          </div>
-          {handleImageUpload && (
-            <input type="file" accept="image/*" onChange={handleImageUpload} />
-          )}
-          <button className="app-button app-button-secondary" onClick={() => onNavigate("home")}>Home</button>
-          <button className="app-button app-button-primary" onClick={() => handleCompare()}>
-            {loading ? "Comparing..." : "Compare"}
-          </button>
-        </div>
-      </header>
+     
+     <header className="app-header">
+  <div className="app-header-inner">
+    <div className="app-search-wrap">
+      <span className="app-search-icon">🔍</span>
+      <input
+        className="app-search-input"
+        placeholder="Compare products across platforms"
+        value={input}
+        onChange={(e) => setInput(e.target.value)}
+      />
+    </div>
+    {handleImageUpload && (
+      <input type="file" accept="image/*" onChange={handleImageUpload} />
+    )}
+    <button className="app-button app-button-primary" onClick={() => handleCompare()}>
+      {loading ? "Comparing..." : "Compare"}
+    </button>
+  </div>
+</header>
 
       <div className="app-hero-strip">
         Fast product comparison across Blinkit, Zepto, BigBasket and JioMart — powered by BuyWise.
