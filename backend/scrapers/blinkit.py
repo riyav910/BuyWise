@@ -80,34 +80,36 @@ async def scrape_blinkit(product_name, headless=True):
                     # Extract exact product URL
                     product_url = None
                     try:
-                        product_url_raw = await price_el.evaluate(
+                        extracted_link = await price_el.evaluate(
                             """el => {
                                 let curr = el;
                                 for (let i = 0; i < 15; i++) {
                                     if (!curr) break;
                                     if (curr.tagName === 'A' && (curr.getAttribute('href') || '').includes('/prn/')) {
-                                        return curr.getAttribute('href');
+                                        return { type: 'href', val: curr.getAttribute('href') };
                                     }
                                     const a = curr.querySelector('a[href*="/prn/"]');
                                     if (a && a.getAttribute('href')) {
-                                        return a.getAttribute('href');
+                                        return { type: 'href', val: a.getAttribute('href') };
                                     }
-                                    curr = curr.parentElement;
-                                }
-                                curr = el;
-                                for (let i = 0; i < 12; i++) {
-                                    if (!curr) break;
-                                    const a = curr.tagName === 'A' ? curr : curr.querySelector('a[href^="/"]');
-                                    if (a && a.getAttribute('href') && !a.getAttribute('href').startsWith('#')) {
-                                        return a.getAttribute('href');
+                                    if (curr.id && /^\\d+$/.test(curr.id)) {
+                                        return { type: 'prid', val: curr.id };
+                                    }
+                                    const pid = curr.getAttribute('data-product-id') || curr.getAttribute('data-item-id');
+                                    if (pid && /^\\d+$/.test(pid)) {
+                                        return { type: 'prid', val: pid };
                                     }
                                     curr = curr.parentElement;
                                 }
                                 return null;
                             }"""
                         )
-                        if product_url_raw:
-                            product_url = urljoin("https://blinkit.com", product_url_raw)
+                        if extracted_link:
+                            if extracted_link.get("type") == "href":
+                                product_url = urljoin("https://blinkit.com", extracted_link["val"])
+                            elif extracted_link.get("type") == "prid":
+                                slug = re.sub(r"[^a-zA-Z0-9]+", "-", name.lower()).strip("-")
+                                product_url = f"https://blinkit.com/prn/{slug}/prid/{extracted_link['val']}"
                     except Exception:
                         pass
 

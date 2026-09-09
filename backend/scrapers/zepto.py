@@ -25,19 +25,19 @@ async def scrape_zepto(product_name, headless=True):
         try:
 
             await page.goto(
-                f"https://www.zeptonow.com/search?query={product_name}",
+                f"https://www.zepto.com/search?query={product_name}",
                 wait_until="domcontentloaded",
                 timeout=60000
             )
 
             await page.wait_for_selector(
-                '[data-slot-id="ProductName"]',
-                timeout=20000
+                'a[data-testid="product-card"], a.B4vNQ, [data-slot-id="ProductName"]',
+                timeout=40000
             )
 
             await asyncio.sleep(2)
 
-            cards = await page.query_selector_all("a.B4vNQ")
+            cards = await page.query_selector_all('a[data-testid="product-card"], a.B4vNQ')
 
             extracted_products = []
 
@@ -47,7 +47,7 @@ async def scrape_zepto(product_name, headless=True):
 
                     # NAME
                     name_el = await card.query_selector(
-                        '[data-slot-id="ProductName"] span'
+                        '[data-slot-id="ProductName"] span, [data-slot-id="ProductName"]'
                     )
 
                     name = (
@@ -55,6 +55,10 @@ async def scrape_zepto(product_name, headless=True):
                         if name_el
                         else None
                     )
+                    if not name:
+                        img_el = await card.query_selector("img[alt]")
+                        if img_el:
+                            name = await img_el.get_attribute("alt")
 
                     # PRICE: Extract discounted selling price (if multiple prices exist, e.g. MRP vs discounted, pick the lowest)
                     price_value = None
@@ -91,7 +95,7 @@ async def scrape_zepto(product_name, headless=True):
 
                     # QUANTITY
                     qty_el = await card.query_selector(
-                        '[data-slot-id="PackSize"] span'
+                        '[data-slot-id="PackSize"] span, [data-slot-id="PackSize"]'
                     )
 
                     qty_text = (
@@ -99,6 +103,11 @@ async def scrape_zepto(product_name, headless=True):
                         if qty_el
                         else None
                     )
+                    if not qty_text:
+                        raw_card = await card.inner_text()
+                        qm = re.search(r"\d+\s*(?:g|kg|ml|l|pack|piece|unit)s?", raw_card, re.I)
+                        if qm:
+                            qty_text = qm.group(0)
 
                     if not name or not price_value:
                         continue
@@ -116,7 +125,7 @@ async def scrape_zepto(product_name, headless=True):
                     try:
                         product_url_raw = await card.get_attribute("href") or await card.evaluate("el => el.getAttribute('href') || el.href")
                         if product_url_raw:
-                            product_url = urljoin("https://www.zeptonow.com", product_url_raw)
+                            product_url = urljoin("https://www.zepto.com", product_url_raw)
                     except Exception:
                         pass
 
