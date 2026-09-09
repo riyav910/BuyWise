@@ -8,6 +8,7 @@ backend/cache
 backend/scrapers/__pycache__
 backend/scrapers/instamart.py
 backend/scratch/
+scratch/
 
 # ======================
 # Frontend (Node)

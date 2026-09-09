@@ -21,7 +21,7 @@ if sys.platform == "win32":
     asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
 
 
-async def scrape_all_platforms(product_name: str, headless: bool = True) -> list[dict]:
+async def scrape_all_platforms(product_name: str, headless: bool = False) -> list[dict]:
     """
     Main scraper coordinator.
     Scrapes all platforms in parallel with the given headless configuration.
