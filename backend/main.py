@@ -105,28 +105,44 @@ def login(data: dict):
 @app.post("/compare")
 async def compare_prices(request: ItemRequest):
     try:
-        results = []
+        # Expand any comma-separated product names and deduplicate while preserving order
+        processed_items = []
+        for raw in request.items:
+            for part in raw.split(","):
+                cleaned = part.lower().strip()
+                if cleaned and cleaned not in processed_items:
+                    processed_items.append(cleaned)
 
-        for item in request.items:
-            cleaned_item = item.lower().strip()
-            if not cleaned_item:
-                continue
+        if not processed_items:
+            return {"message": "No valid products provided"}
 
-            print(f"\nProcessing: {cleaned_item}")
+        print(f"\n[PARALLEL EXECUTION] Processing {len(processed_items)} products in parallel: {processed_items}")
 
+        async def fetch_single_item(item_name: str):
+            print(f"Starting parallel fetch for: {item_name}")
             # 1. Record search/order query in Redis ZSET
             try:
-                r.zadd("recent_queries", {cleaned_item: time.time()})
+                r.zadd("recent_queries", {item_name: time.time()})
                 r.zremrangebyrank("recent_queries", 0, -101)  # Limit to 100 items
             except Exception as e:
-                print(f"Redis ZSET log error: {e}")
+                print(f"Redis ZSET log error for {item_name}: {e}")
 
             # 2. Fetch product data (runs parallel scrapers, using cache if hit)
-            data = await fetch_product_data(cleaned_item, bypass_cache=False, headless=False)
+            try:
+                data = await fetch_product_data(item_name, bypass_cache=False, headless=False)
+                return data or []
+            except Exception as e:
+                print(f"Error fetching product '{item_name}': {e}")
+                return []
 
+        # Run all product extractions in parallel
+        item_results = await asyncio.gather(*(fetch_single_item(item) for item in processed_items))
+
+        results = []
+        for data in item_results:
             if data:
                 results.extend(data)
-                
+
         if not results:
             return {"message": "No data found"}
 
@@ -135,11 +151,10 @@ async def compare_prices(request: ItemRequest):
             required_quantity=request.required_quantity,
             required_unit=request.required_unit,
         )
-        
-        # Calculate optimized cart values in INR
-        optimized = optimize_cart_inr(results, request.items)
-        final["optimized"] = optimized
 
+        # Calculate optimized cart values in INR across all parallel requested items
+        optimized = optimize_cart_inr(results, processed_items)
+        final["optimized"] = optimized
 
         return final
 
