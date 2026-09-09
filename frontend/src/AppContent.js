@@ -147,19 +147,32 @@ export function PlatformCard({ item }) {
           <div className={pillClass}>{item.initial}</div>
           <div>
             <div className="app-platform-card-name">{item.name}</div>
-            <div className="app-platform-card-subtitle">{item.platformLabel}</div>
+            <div className="app-platform-card-subtitle" title={item.product_name} style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: "160px" }}>
+              {item.product_name}
+            </div>
           </div>
         </div>
-        {item.best && <Badge variant="success">Best price</Badge>}
+        <div style={{ display: "flex", gap: "4px", flexWrap: "wrap", justifyContent: "flex-end" }}>
+          {item.best && <Badge variant="success">Best deal</Badge>}
+          {item.isBestUnitPrice && <Badge variant="info">Best unit rate</Badge>}
+        </div>
       </div>
 
-      <div className="app-platform-card-price-row">
+      <div className="app-platform-card-price-row" style={{ alignItems: "baseline", flexWrap: "wrap", gap: "8px" }}>
         <span className="app-platform-card-price">₹{item.price}</span>
-        {item.original > item.price && <span className="app-platform-card-original">₹{item.original}</span>}
-        <span className="app-platform-card-discount">
-          {item.discount > 0 ? `${item.discount}% off` : item.price === item.original ? "No discount" : ""}
-        </span>
+        {item.packageDisplay && (
+          <span style={{ fontSize: "0.85rem", color: "#666", fontWeight: 500 }}>
+            ({item.packageDisplay})
+          </span>
+        )}
+        {item.unitPriceDisplay && (
+          <span className="app-chip app-chip--good" style={{ fontSize: "0.75rem", padding: "2px 8px" }}>
+            {item.unitPriceDisplay}
+          </span>
+        )}
+        {item.discount > 0 && <span className="app-platform-card-discount">{item.discount}% off</span>}
       </div>
+
 
       <div className="app-platform-card-chip-row">
         <span className={`app-chip app-chip--${item.deliveryChip}`}>{item.deliveryLabel}</span>
@@ -173,12 +186,12 @@ export function PlatformCard({ item }) {
       </div>
 
       <a
-        href={`${item.searchUrl}${encodeURIComponent(item.product_name)}`}
+        href={item.product_url || (item.searchUrl ? `${item.searchUrl}${encodeURIComponent(item.product_name)}` : "#")}
         target="_blank"
         rel="noopener noreferrer"
         className={buttonClass}
       >
-        Buy on {item.name}
+        View on {item.name}
       </a>
     </div>
   );

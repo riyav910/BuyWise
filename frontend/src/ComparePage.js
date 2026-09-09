@@ -1,4 +1,4 @@
-import { Badge, mlInsights, relatedProducts, PlatformCard, BarRow, RelatedCard } from "./AppContent";
+import { Badge, relatedProducts, PlatformCard, BarRow, RelatedCard } from "./AppContent";
 
 export default function ComparePage({ input, setInput, handleCompare, handleImageUpload, loading, error, result, platforms, maxTotal, onNavigate }) {
   return (
@@ -54,14 +54,37 @@ export default function ComparePage({ input, setInput, handleCompare, handleImag
           <>
             <div className="app-highlight-panel fade-up">
               <div>
-                <div className="app-highlight-label">Best deal</div>
+                <div className="app-highlight-label">Best order deal</div>
                 <div className="app-highlight-value">{result.best?.platform || "No valid result"}</div>
+                {result.best?.product_url && (
+                  <div style={{ marginTop: "4px" }}>
+                    <a
+                      href={result.best.product_url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      style={{ color: "#2563eb", textDecoration: "underline", fontSize: "13px" }}
+                    >
+                      View on {result.best.platform} ↗
+                    </a>
+                  </div>
+                )}
+                {result.best_unit_price && (
+                  <div className="app-highlight-meta" style={{ marginTop: "6px" }}>
+                    Lowest unit rate: <strong style={{ color: "#16a34a" }}>{result.best_unit_price.unit_price_display}</strong> on <strong style={{ textTransform: "capitalize" }}>{result.best_unit_price.platform}</strong>
+                    {result.best_unit_price.product_url && (
+                      <span style={{ marginLeft: "8px" }}>
+                        · <a href={result.best_unit_price.product_url} target="_blank" rel="noopener noreferrer" style={{ color: "#2563eb", textDecoration: "underline" }}>View product ↗</a>
+                      </span>
+                    )}
+                  </div>
+                )}
               </div>
               <div className="app-highlight-right">
                 <div className="app-highlight-meta">Compared {result.all.length} offers</div>
                 <div className="app-highlight-total">{result.best ? `₹${result.best.price + (result.best.delivery ?? 0)}` : "—"}</div>
               </div>
             </div>
+
 
             <div className="app-section-label">Platform comparison</div>
             <div className="app-platforms-grid">

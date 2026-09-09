@@ -107,7 +107,11 @@ function MainApp() {
       const productName = item.product_name || item.name || "Product";
       const price = item.price ?? 0;
       const delivery = item.delivery ?? 0;
-      const best = result?.best?.platform?.toLowerCase() === platformKey;
+      const isBestDeal = result?.best?.platform?.toLowerCase() === platformKey;
+      const isBestUnitPrice = (result?.best_unit_price?.platform?.toLowerCase() === platformKey) || Boolean(item.is_best_unit_price);
+      const packageDisplay = item.package_display || (item.qty && item.unit ? `${item.qty} ${item.unit}` : "");
+      const unitPriceDisplay = item.unit_price_display || (item.unit_price ? `₹${item.unit_price}/${item.unit_price_unit || 'unit'}` : "");
+
       const deliveryLabel = delivery === 0 ? "Free delivery" : `₹${delivery} delivery`;
       const stockChip = platformKey === "blinkit" ? "good" : platformKey === "swiggy" ? "warn" : "neutral";
       const stockText = platformKey === "swiggy" ? "Low stock" : "In stock";
@@ -118,6 +122,9 @@ function MainApp() {
         ...meta,
         platformLabel: meta.name,
         product_name: productName,
+        packageDisplay,
+        unitPriceDisplay,
+        isBestUnitPrice,
         price,
         original,
         discount: original > price ? Math.round(((original - price) / original) * 100) : 0,
@@ -127,10 +134,12 @@ function MainApp() {
         time: timeLabel,
         stock: stockText,
         stockChip,
-        best,
+        best: isBestDeal,
+        product_url: item.product_url || null,
         searchUrl: meta.searchBase,
       };
     }) || [];
+
 
   const maxTotal = Math.max(1, ...platforms.map((item) => item.price + item.delivery));
 

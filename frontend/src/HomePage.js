@@ -1,5 +1,7 @@
 import { useState, useEffect, useRef } from "react";
-import { PLATFORMS, STATS, FEATURES, TRENDING, AnimatedCounter } from "./AppContent";
+import { PLATFORMS, STATS, TRENDING, AnimatedCounter } from "./AppContent";
+
+const placeholders = ["Search for Maggi noodles...", "Try Amul butter 500g...", "Compare Tata Tea prices..."];
 
 export default function HomePage({ onNavigate }) {
   const [searchQuery, setSearchQuery] = useState("");
@@ -7,7 +9,6 @@ export default function HomePage({ onNavigate }) {
   const [alertEmail, setAlertEmail] = useState("");
   const [alertSet, setAlertSet] = useState(false);
 
-  const placeholders = ["Search for Maggi noodles...", "Try Amul butter 500g...", "Compare Tata Tea prices..."];
   const placeholderRef = useRef(0);
   const charRef = useRef(0);
   const deletingRef = useRef(false);

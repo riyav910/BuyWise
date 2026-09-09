@@ -32,9 +32,14 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+from typing import Optional
+
 # Request model
 class ItemRequest(BaseModel):
     items: list[str]
+    required_quantity: Optional[float] = None
+    required_unit: Optional[str] = None
+
 
 
 #=========================
@@ -125,11 +130,16 @@ async def compare_prices(request: ItemRequest):
         if not results:
             return {"message": "No data found"}
 
-        final = compare_products(results)
+        final = compare_products(
+            results,
+            required_quantity=request.required_quantity,
+            required_unit=request.required_unit,
+        )
         
         # Calculate optimized cart values in INR
         optimized = optimize_cart_inr(results, request.items)
         final["optimized"] = optimized
+
 
         return final
 
