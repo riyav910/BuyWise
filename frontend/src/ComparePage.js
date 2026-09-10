@@ -1,6 +1,6 @@
-import { Badge, mlInsights, relatedProducts, PlatformCard, BarRow, RelatedCard } from "./AppContent";
+import { Badge, relatedProducts, PlatformCard, BarRow, RelatedCard } from "./AppContent";
 
-export default function ComparePage({ input, setInput, handleCompare, handleImageUpload, loading, error, result, platforms, maxTotal, onNavigate }) {
+export default function ComparePage({ input, setInput, handleCompare, handleImageUpload, ocrLoading, loading, error, result, platforms, maxTotal, onNavigate }) {
   return (
     <div className="app-page">
      
@@ -16,7 +16,7 @@ export default function ComparePage({ input, setInput, handleCompare, handleImag
       />
     </div>
     {handleImageUpload && (
-      <input type="file" accept="image/*" onChange={handleImageUpload} />
+      <input type="file" accept="image/*" onChange={handleImageUpload} disabled={ocrLoading} />
     )}
     <button className="app-button app-button-primary" onClick={() => handleCompare()}>
       {loading ? "Comparing..." : "Compare"}

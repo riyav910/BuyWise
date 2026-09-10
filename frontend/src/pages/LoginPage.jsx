@@ -1,6 +1,6 @@
 import { useState } from "react";
-import axios from "axios";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
+import { useAuth } from "../auth/AuthContext";
 
 export default function Login() {
   const [email, setEmail] = useState("");
@@ -9,39 +9,20 @@ export default function Login() {
   const [focusedField, setFocusedField] = useState(null);
 
   const navigate = useNavigate();
+  const location = useLocation();
+  const { login } = useAuth();
 
   const handleLogin = async (e) => {
     e.preventDefault();
     setLoading(true);
 
     try {
-      const res = await axios.post(
-        "http://127.0.0.1:8000/login",
-        {
-          email,
-          password,
-        }
-      );
-
-      if (res.data.status === "success") {
-        const userData = res.data.user;
-
-        localStorage.setItem(
-          "user",
-          JSON.stringify(userData)
-        );
-
-        window.dispatchEvent(
-          new Event("storage")
-        );
-
-        navigate("/");
-      } else {
-        alert(res.data.message);
-      }
+      await login(email, password);
+      const destination = location.state?.from?.pathname || "/home";
+      navigate(destination, { replace: true });
     } catch (err) {
       console.error("Login error:", err);
-      alert("Login failed");
+      alert(err.response?.data?.message || "Login failed");
     } finally {
       setLoading(false);
     }

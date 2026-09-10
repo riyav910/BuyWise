@@ -255,6 +255,22 @@ input {
   margin-bottom: 10px;
 }
 
+.app-profile-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 24px;
+  padding: 14px 0;
+  border-bottom: 1px solid #e5e5e0;
+}
+
+.app-profile-row:last-child {
+  border-bottom: none;
+}
+
+.app-profile-label {
+  color: #666666;
+}
+
 .app-card-copy {
   font-size: 14px;
   color: #666666;
@@ -1536,6 +1552,18 @@ input {
   border-radius: 8px;
   background: #ef4444;
   color: #fff;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.nav-profile-btn {
+  width: 100%;
+  padding: 8px;
+  margin-bottom: 8px;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  background: #fff;
+  color: var(--color-text);
   font-weight: 600;
   cursor: pointer;
 }

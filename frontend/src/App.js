@@ -1,22 +1,25 @@
 import { useState } from "react";
 import { BrowserRouter, Routes, Route, useNavigate } from "react-router-dom";
-import axios from "axios";
+import api from "./api";
 import "./App.css";
 
 // Components from branches
 import Navbar from "./components/Navbar";
+import ProtectedRoute from "./components/ProtectedRoute";
 import HomePage from "./HomePage";
 import DealsPage from "./DealsPage";
 import AboutPage from "./AboutPage";
 import ComparePage from "./ComparePage";
 import LoginPage from "./pages/LoginPage";
 import CreateAccount from "./pages/CreateAccount";
+import ProfilePage from "./pages/ProfilePage";
 import { PLATFORM_META, COLORS } from "./AppContent";
 
 function MainApp() {
   const [input, setInput] = useState("");
   const [result, setResult] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [ocrLoading, setOcrLoading] = useState(false);
   const [error, setError] = useState("");
   const navigate = useNavigate();
 
@@ -27,23 +30,25 @@ function MainApp() {
 
     const formData = new FormData();
     formData.append("file", file);
+    setResult(null);
+    setInput("");
+    setError("");
+    setOcrLoading(true);
 
     try {
-      const res = await axios.post(
-        "http://127.0.0.1:8000/parse-image",
-        formData,
-        {
-          headers: {
-            "Content-Type": "multipart/form-data",
-          },
-        }
-      );
+      const res = await api.post("/products/parse-image", formData);
 
-      console.log("OCR items:", res.data.items);
-      setInput(res.data.items.join(", "));
+      const items = res.data.items || [];
+      if (!items.length) {
+        setError("No products could be extracted from that image.");
+        return;
+      }
+      setInput(items.join(", "));
     } catch (err) {
       console.error(err);
-      alert("OCR failed");
+      setError(err.response?.data?.message || "OCR failed. Please try another image.");
+    } finally {
+      setOcrLoading(false);
     }
   };
 
@@ -61,8 +66,8 @@ function MainApp() {
 
     try {
       const items = query.split(",").map((item) => item.trim()).filter(Boolean);
-      const res = await axios.post("http://127.0.0.1:8000/compare", { items });
-      const data = res.data;
+      const res = await api.post("/products/compare", { items });
+      const data = res.data.data;
       if (data.error || data.message) {
         setError(data.error || data.message || "No results found.");
         setResult(null);
@@ -71,11 +76,11 @@ function MainApp() {
       }
     } catch (err) {
       console.error(err);
-      setError("Unable to fetch comparison. Is the backend running?");
+      setError(err.response?.data?.message || "Unable to fetch comparison. Is the backend running?");
       setResult(null);
+    } finally {
+      setLoading(false);
     }
-
-    setLoading(false);
   };
 
   const handleNavigate = (target, query) => {
@@ -144,27 +149,32 @@ function MainApp() {
       <Navbar />
       <Routes>
         <Route path="/" element={<HomePage onNavigate={handleNavigate} />} />
-        <Route
-          path="/compare"
-          element={
-            <ComparePage
-              input={input}
-              setInput={setInput}
-              handleCompare={handleCompare}
-              handleImageUpload={handleImageUpload}
-              loading={loading}
-              error={error}
-              result={result}
-              platforms={platforms}
-              maxTotal={maxTotal}
-              onNavigate={handleNavigate}
-            />
-          }
-        />
         <Route path="/login" element={<LoginPage />} />
         <Route path="/signup" element={<CreateAccount />} />
-        <Route path="/deals" element={<DealsPage onNavigate={handleNavigate} />} />
-        <Route path="/about" element={<AboutPage onNavigate={handleNavigate} />} />
+        <Route element={<ProtectedRoute />}>
+          <Route path="/home" element={<HomePage onNavigate={handleNavigate} />} />
+          <Route
+            path="/compare"
+            element={
+              <ComparePage
+                input={input}
+                setInput={setInput}
+                handleCompare={handleCompare}
+                handleImageUpload={handleImageUpload}
+                ocrLoading={ocrLoading}
+                loading={loading}
+                error={error}
+                result={result}
+                platforms={platforms}
+                maxTotal={maxTotal}
+                onNavigate={handleNavigate}
+              />
+            }
+          />
+          <Route path="/deals" element={<DealsPage onNavigate={handleNavigate} />} />
+          <Route path="/about" element={<AboutPage onNavigate={handleNavigate} />} />
+          <Route path="/profile" element={<ProfilePage />} />
+        </Route>
       </Routes>
     </>
   );

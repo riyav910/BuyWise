@@ -1,4 +1,5 @@
 import asyncio
+import os
 import sys
 import time
 from fastapi import FastAPI, HTTPException
@@ -24,17 +25,31 @@ except Exception as e:
     print("Redis connection failed:", e)
 
 # CORS
+allowed_origins = [
+    origin.strip()
+    for origin in os.getenv(
+        "PYTHON_ALLOWED_ORIGINS",
+        "http://localhost:3000,http://localhost:5000"
+    ).split(",")
+    if origin.strip()
+]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=allowed_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
+from typing import Optional
+
 # Request model
 class ItemRequest(BaseModel):
     items: list[str]
+    required_quantity: Optional[float] = None
+    required_unit: Optional[str] = None
+
 
 
 #=========================
@@ -125,11 +140,16 @@ async def compare_prices(request: ItemRequest):
         if not results:
             return {"message": "No data found"}
 
-        final = compare_products(results)
+        final = compare_products(
+            results,
+            required_quantity=request.required_quantity,
+            required_unit=request.required_unit,
+        )
         
         # Calculate optimized cart values in INR
         optimized = optimize_cart_inr(results, request.items)
         final["optimized"] = optimized
+
 
         return final
 

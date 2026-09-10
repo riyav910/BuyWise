@@ -1,30 +1,21 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
+import { useAuth } from "../auth/AuthContext";
 
 export default function Navbar() {
   const navigate = useNavigate();
   const location = useLocation();
-  const [user, setUser] = useState(null);
+  const { user, logout } = useAuth();
   const [openMenu, setOpenMenu] = useState(false);
 
-  useEffect(() => {
-    const stored = JSON.parse(localStorage.getItem("user"));
-    setUser(stored);
-  }, []);
-
-  useEffect(() => {
-    const handleStorageChange = () => {
-      setUser(JSON.parse(localStorage.getItem("user")));
-    };
-    window.addEventListener("storage", handleStorageChange);
-    return () => window.removeEventListener("storage", handleStorageChange);
-  }, []);
-
-  const handleLogout = () => {
-    localStorage.removeItem("user");
-    setUser(null);
-    setOpenMenu(false);
-    navigate("/login");
+  const handleLogout = async () => {
+    try {
+      await logout();
+      setOpenMenu(false);
+      navigate("/login");
+    } catch (error) {
+      console.error("Logout error:", error);
+    }
   };
 
   const isActive = (path) => location.pathname === path;
@@ -71,6 +62,15 @@ export default function Navbar() {
                 <div className="nav-dropdown">
                   <p className="nav-dropdown-name">{user?.name}</p>
                   <hr className="nav-dropdown-divider" />
+                  <button
+                    className="nav-profile-btn"
+                    onClick={() => {
+                      setOpenMenu(false);
+                      navigate("/profile");
+                    }}
+                  >
+                    Profile
+                  </button>
                   <button className="nav-logout-btn" onClick={handleLogout}>
                     Logout
                   </button>

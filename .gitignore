@@ -18,7 +18,12 @@ frontend/node_modules/
 # ======================
 .env
 backend/.env
+backend/node-server/.env
 frontend/.env
+frontend/build/
+
+# Node dependencies
+node_modules/
 
 # ======================
 # OS / IDE

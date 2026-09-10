@@ -2,26 +2,17 @@ import asyncio
 import sys
 
 # Support running directly as script (python scrapers/scraper.py) or as imported module
-try:
-    from scrapers.bigbasket import scrape_bigbasket
-    from scrapers.blinkit import scrape_blinkit
-    from scrapers.zepto import scrape_zepto
-    from scrapers.jiomart import scrape_jiomart
-    from scrapers.instamart import scrape_instamart
-except ImportError:
-    from bigbasket import scrape_bigbasket
-    from blinkit import scrape_blinkit
-    from zepto import scrape_zepto
-    from jiomart import scrape_jiomart
-    from instamart import scrape_instamart
+from .bigbasket import scrape_bigbasket
+from .blinkit import scrape_blinkit
+from .zepto import scrape_zepto
+from .jiomart import scrape_jiomart
 
 if sys.platform == "win32":
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
     sys.stderr.reconfigure(encoding="utf-8", errors="replace")
     asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
 
-
-async def scrape_all_platforms(product_name: str, headless: bool = True) -> list[dict]:
+async def scrape_all_platforms(product_name: str, headless: bool = False) -> list[dict]:
     """
     Main scraper coordinator.
     Scrapes all platforms in parallel with the given headless configuration.
@@ -36,7 +27,7 @@ async def scrape_all_platforms(product_name: str, headless: bool = True) -> list
         ("Blinkit", scrape_blinkit(product_name, headless=headless)),
         ("Zepto", scrape_zepto(product_name, headless=headless)),
         ("JioMart", scrape_jiomart(product_name, headless=headless)),
-        ("Instamart", scrape_instamart(product_name, headless=headless)),
+        # ("Instamart", scrape_instamart(product_name, headless=headless)),
     ]
 
     names = [name for name, _ in scraper_tasks]
@@ -80,7 +71,9 @@ async def main():
     print(f"FINAL RESULTS ({len(results)} platforms)")
     print("============================")
     for r in results:
-        print(f"Platform: {r.get('platform', 'N/A'):<12} | Price: Rs {r.get('price', 'N/A'):<6} | Qty: {r.get('qty', 'N/A')} | Delivery: Rs {r.get('delivery', 'N/A')} | Product: {r.get('product_name', 'N/A')}")
+        pkg = r.get("package_display") or f"{r.get('qty')} {r.get('unit', '')}"
+        u_price = r.get("unit_price_display") or "N/A"
+        print(f"Platform: {r.get('platform', 'N/A'):<10} | Price: ₹{r.get('price', 0):<4} | Size: {pkg:<10} | Rate: {u_price:<8} | Del: ₹{r.get('delivery', 0)} | {r.get('product_name', 'N/A')}")
 
 
 if __name__ == "__main__":
