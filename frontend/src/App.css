@@ -2165,6 +2165,7 @@ input {
   .about-story-layout {
     grid-template-columns: 1fr;
   }
+}
 
   .deals-page {
     background: var(--color-bg);

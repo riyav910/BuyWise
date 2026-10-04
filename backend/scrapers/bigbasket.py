@@ -114,33 +114,6 @@ async def scrape_bigbasket(product_name, headless=True):
                 if product_info["normalized_quantity"] is not None:
                     print(f"{name} → ₹{price_value} | {product_info['package_display']} | {product_info['unit_price_display']}")
                     extracted_products.append(product_info)
-                # Extract exact product URL
-                product_url = None
-                try:
-                    product_url_raw = await parent.evaluate(
-                        """el => {
-                            const a = el.querySelector('a[href*="/pd/"]') || el.querySelector('a') || el.closest('a');
-                            return a ? (a.getAttribute('href') || a.href) : null;
-                        }"""
-                    )
-                    if product_url_raw:
-                        product_url = urljoin("https://www.bigbasket.com", product_url_raw)
-                except Exception:
-                    pass
-
-                product_info = enrich_product_pricing(
-                    platform="bigbasket",
-                    product_name=name,
-                    price=price_value,
-                    qty_text=parent_text,
-                    delivery=20.0,
-                    eta=15,
-                    product_url=product_url,
-                )
-
-                if product_info["normalized_quantity"] is not None:
-                    print(f"{name} → ₹{price_value} | {product_info['package_display']} | {product_info['unit_price_display']}")
-                    extracted_products.append(product_info)
             except Exception as e:
                 print(f" Error: {e}")
 
