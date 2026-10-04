@@ -4,18 +4,10 @@ import sys
 HEADLESS_MODE = True
 
 # Support running directly as script (python scrapers/scraper.py) or as imported module
-try:
-    from scrapers.bigbasket import scrape_bigbasket
-    from scrapers.blinkit import scrape_blinkit
-    from scrapers.zepto import scrape_zepto
-    from scrapers.jiomart import scrape_jiomart
-    from scrapers.instamart import scrape_instamart
-except ImportError:
-    from bigbasket import scrape_bigbasket
-    from blinkit import scrape_blinkit
-    from zepto import scrape_zepto
-    from jiomart import scrape_jiomart
-    from instamart import scrape_instamart
+from .bigbasket import scrape_bigbasket
+from .blinkit import scrape_blinkit
+from .zepto import scrape_zepto
+from .jiomart import scrape_jiomart
 
 if sys.platform == "win32":
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
@@ -87,6 +79,9 @@ async def main():
     print(f"FINAL RESULTS ({len(results)} platforms)")
     print("============================")
     for r in results:
+        pkg = r.get("package_display") or f"{r.get('qty')} {r.get('unit', '')}"
+        u_price = r.get("unit_price_display") or "N/A"
+        print(f"Platform: {r.get('platform', 'N/A'):<10} | Price: ₹{r.get('price', 0):<4} | Size: {pkg:<10} | Rate: {u_price:<8} | Del: ₹{r.get('delivery', 0)} | {r.get('product_name', 'N/A')}")
         pkg = r.get("package_display") or f"{r.get('qty')} {r.get('unit', '')}"
         u_price = r.get("unit_price_display") or "N/A"
         print(f"Platform: {r.get('platform', 'N/A'):<10} | Price: ₹{r.get('price', 0):<4} | Size: {pkg:<10} | Rate: {u_price:<8} | Del: ₹{r.get('delivery', 0)} | {r.get('product_name', 'N/A')}")

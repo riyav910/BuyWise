@@ -1,16 +1,19 @@
 import { useState, useMemo } from "react";
 import { BrowserRouter, Routes, Route, useNavigate } from "react-router-dom";
 import axios from "axios";
+import api from "./api";
 import "./App.css";
 
 // Components from branches
 import Navbar from "./components/Navbar";
+import ProtectedRoute from "./components/ProtectedRoute";
 import HomePage from "./HomePage";
 import DealsPage from "./DealsPage";
 import AboutPage from "./AboutPage";
 import ComparePage from "./ComparePage";
 import LoginPage from "./pages/LoginPage";
 import CreateAccount from "./pages/CreateAccount";
+import ProfilePage from "./pages/ProfilePage";
 import { PLATFORM_META, COLORS } from "./AppContent";
 
 function mapItemToPlatform(item, bestDeal, bestUnitPrice) {
@@ -28,13 +31,24 @@ function mapItemToPlatform(item, bestDeal, bestUnitPrice) {
   const productName = item.product_name || item.name || "Product";
   const price = item.price ?? 0;
   const delivery = item.delivery ?? 0;
-  const isBestDeal = (bestDeal?.platform?.toLowerCase() === platformKey && (!item.search_term || !bestDeal?.search_term || item.search_term.toLowerCase() === bestDeal?.search_term.toLowerCase())) || Boolean(item.is_best_deal);
-  const isBestUnitPrice = (bestUnitPrice?.platform?.toLowerCase() === platformKey) || Boolean(item.is_best_unit_price);
-  const packageDisplay = item.package_display || (item.qty && item.unit ? `${item.qty} ${item.unit}` : "");
-  const unitPriceDisplay = item.unit_price_display || (item.unit_price ? `₹${item.unit_price}/${item.unit_price_unit || 'unit'}` : "");
+  const isBestDeal =
+    (bestDeal?.platform?.toLowerCase() === platformKey &&
+      (!item.search_term ||
+        !bestDeal?.search_term ||
+        item.search_term.toLowerCase() === bestDeal?.search_term.toLowerCase())) ||
+    Boolean(item.is_best_deal);
+  const isBestUnitPrice =
+    bestUnitPrice?.platform?.toLowerCase() === platformKey ||
+    Boolean(item.is_best_unit_price);
+  const packageDisplay =
+    item.package_display || (item.qty && item.unit ? `${item.qty} ${item.unit}` : "");
+  const unitPriceDisplay =
+    item.unit_price_display ||
+    (item.unit_price ? `₹${item.unit_price}/${item.unit_price_unit || "unit"}` : "");
 
   const deliveryLabel = delivery === 0 ? "Free delivery" : `₹${delivery} delivery`;
-  const stockChip = platformKey === "blinkit" ? "good" : platformKey === "swiggy" ? "warn" : "neutral";
+  const stockChip =
+    platformKey === "blinkit" ? "good" : platformKey === "swiggy" ? "warn" : "neutral";
   const stockText = platformKey === "swiggy" ? "Low stock" : "In stock";
   const timeLabel = item.eta ? `${item.eta} min` : "—";
   const original = Math.max(price, item.original ?? price);
@@ -65,41 +79,51 @@ function MainApp() {
   const [input, setInput] = useState("");
   const [result, setResult] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [ocrLoading, setOcrLoading] = useState(false);
   const [error, setError] = useState("");
   const navigate = useNavigate();
 
-  // OCR image upload (from local work)
+  // OCR image upload (with node-server proxy and direct fallback)
   const handleImageUpload = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
 
     setLoading(true);
+    setOcrLoading(true);
     setError("");
 
     const formData = new FormData();
     formData.append("file", file);
 
     try {
-      const res = await axios.post("http://127.0.0.1:8000/ocr-compare", formData, {
-        headers: { "Content-Type": "multipart/form-data" },
-      });
-      const data = res.data;
-      if (data.error || data.message) {
-        setError(data.error || data.message || "No results found from receipt.");
-        setResult(null);
+      let extracted = [];
+      try {
+        const res = await api.post("/products/parse-image", formData);
+        extracted = res.data?.items || [];
+      } catch (nodeErr) {
+        const res = await axios.post("http://127.0.0.1:8000/parse-image", formData, {
+          headers: { "Content-Type": "multipart/form-data" },
+        });
+        extracted = res.data?.items || [];
+      }
+
+      if (extracted.length === 0) {
+        setError("No product names could be detected in this image. Please enter them manually.");
       } else {
-        setResult(data);
+        const query = extracted.join(", ");
+        setInput(query);
+        handleCompare(query);
       }
     } catch (err) {
-      console.error(err);
-      setError("Unable to process image. Is the backend running?");
-      setResult(null);
+      console.error("OCR error:", err);
+      setError("Unable to process image. Please check that the backend is running.");
+    } finally {
+      setLoading(false);
+      setOcrLoading(false);
     }
-
-    setLoading(false);
   };
 
-  // Compare handler (from frontend-update)
+  // Compare handler (with node-server proxy and direct fallback)
   const handleCompare = async (queryOverride) => {
     const query = (queryOverride ?? input).trim();
     if (!query) {
@@ -112,22 +136,33 @@ function MainApp() {
     setLoading(true);
 
     try {
-      const items = query.split(",").map((item) => item.trim()).filter(Boolean);
-      const res = await axios.post("http://127.0.0.1:8000/compare", { items });
-      const data = res.data;
-      if (data.error || data.message) {
-        setError(data.error || data.message || "No results found.");
+      const items = query
+        .split(",")
+        .map((item) => item.trim())
+        .filter(Boolean);
+
+      let resData = null;
+      try {
+        const res = await api.post("/products/compare", { items });
+        resData = res.data?.data || res.data;
+      } catch (nodeErr) {
+        const res = await axios.post("http://127.0.0.1:8000/compare", { items });
+        resData = res.data?.data || res.data;
+      }
+
+      if (resData?.error || resData?.message) {
+        setError(resData.error || resData.message || "No results found.");
         setResult(null);
       } else {
-        setResult(data);
+        setResult(resData);
       }
     } catch (err) {
-      console.error(err);
-      setError("Unable to fetch comparison. Is the backend running?");
+      console.error("Compare error:", err);
+      setError("Unable to fetch comparison. Please verify that the backend is running.");
       setResult(null);
+    } finally {
+      setLoading(false);
     }
-
-    setLoading(false);
   };
 
   const handleNavigate = (target, query) => {
@@ -219,6 +254,7 @@ function MainApp() {
       <Navbar />
       <Routes>
         <Route path="/" element={<HomePage onNavigate={handleNavigate} />} />
+        <Route path="/home" element={<HomePage onNavigate={handleNavigate} />} />
         <Route
           path="/compare"
           element={
@@ -227,6 +263,7 @@ function MainApp() {
               setInput={setInput}
               handleCompare={handleCompare}
               handleImageUpload={handleImageUpload}
+              ocrLoading={ocrLoading}
               loading={loading}
               error={error}
               result={result}
@@ -237,10 +274,13 @@ function MainApp() {
             />
           }
         />
-        <Route path="/login" element={<LoginPage />} />
-        <Route path="/signup" element={<CreateAccount />} />
         <Route path="/deals" element={<DealsPage onNavigate={handleNavigate} />} />
         <Route path="/about" element={<AboutPage onNavigate={handleNavigate} />} />
+        <Route path="/login" element={<LoginPage />} />
+        <Route path="/signup" element={<CreateAccount />} />
+        <Route element={<ProtectedRoute />}>
+          <Route path="/profile" element={<ProfilePage />} />
+        </Route>
       </Routes>
     </>
   );

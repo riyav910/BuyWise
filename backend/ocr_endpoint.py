@@ -54,11 +54,15 @@ async def parse_image(file: UploadFile = File(...)):
         # Tesseract path (Windows)
         pytesseract.pytesseract.tesseract_cmd = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
 
-        # OCR config (important)
-        config = "--oem 3 --psm 4"
-
         try:
-            text = pytesseract.image_to_string(processed, config=config)
+            text = pytesseract.image_to_string(processed, config="--oem 3 --psm 4")
+
+            # Receipts vary widely; retry with the original image when thresholding
+            # removes too much text for the first OCR pass.
+            if not extract_items_from_text(text):
+                fallback = pytesseract.image_to_string(img, config="--oem 3 --psm 6")
+                if len(fallback.strip()) > len(text.strip()):
+                    text = fallback
         except Exception as e:
             print("OCR ERROR:", e)
             raise HTTPException(
@@ -71,6 +75,8 @@ async def parse_image(file: UploadFile = File(...)):
 
         # Extract items
         items = extract_items_from_text(text)
+        if not items:
+            items = extract_fallback_items(text)
 
         return {
             "items": items,
@@ -107,4 +113,15 @@ def extract_items_from_text(text):
         if re.search(r"[a-z]{3,}", line):
             items.append(line)
 
+    return items
+
+
+def extract_fallback_items(text):
+    """Keep readable OCR lines when strict receipt filtering finds nothing."""
+    items = []
+    for line in text.split("\n"):
+        cleaned = re.sub(r"[^a-zA-Z0-9 .%/-]", " ", line).strip()
+        cleaned = re.sub(r"\s+", " ", cleaned)
+        if len(cleaned) >= 3 and re.search(r"[a-zA-Z]{3,}", cleaned):
+            items.append(cleaned.lower())
     return items

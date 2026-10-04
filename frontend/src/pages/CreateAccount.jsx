@@ -1,6 +1,6 @@
 import { useState } from "react";
-import axios from "axios";
 import { useNavigate } from "react-router-dom";
+import { useAuth } from "../auth/AuthContext";
 
 export default function CreateAccount() {
   const [name, setName] = useState("");
@@ -10,42 +10,18 @@ export default function CreateAccount() {
   const [focusedField, setFocusedField] = useState(null);
 
   const navigate = useNavigate();
+  const { signup } = useAuth();
 
   const handleSignup = async (e) => {
     e.preventDefault();
     setLoading(true);
 
     try {
-      const res = await axios.post(
-        "http://127.0.0.1:8000/signup",
-        {
-          name,
-          email,
-          password,
-        }
-      );
-
-      if (res.data.status === "success") {
-        const userData = res.data.user
-          ? res.data.user
-          : { name, email };
-
-        localStorage.setItem(
-          "user",
-          JSON.stringify(userData)
-        );
-
-        window.dispatchEvent(
-          new Event("storage")
-        );
-
-        navigate("/login");
-      } else {
-        alert(res.data.message);
-      }
+      await signup(name, email, password);
+      navigate("/");
     } catch (err) {
       console.error("Signup error:", err);
-      alert("Signup failed");
+      alert(err.response?.data?.message || "Signup failed");
     } finally {
       setLoading(false);
     }

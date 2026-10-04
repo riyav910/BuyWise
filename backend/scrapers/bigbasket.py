@@ -3,6 +3,10 @@ import os
 import re
 import sys
 from urllib.parse import urljoin
+import os
+import re
+import sys
+from urllib.parse import urljoin
 from playwright.async_api import async_playwright
 
 try:
@@ -18,6 +22,7 @@ except ImportError:
 
 
 async def scrape_bigbasket(product_name, headless=True):
+    print(f"\n[SCRAPER] Starting for: {product_name}")
     print(f"\n[SCRAPER] Starting for: {product_name}")
 
     async with async_playwright() as p:
@@ -41,7 +46,10 @@ async def scrape_bigbasket(product_name, headless=True):
             return {}
 
         print("Extracting products...")
+        print("Extracting products...")
 
+        price_elements = await page.query_selector_all("span:has-text('₹')")
+        print(f"Found {len(price_elements)} raw price elements")
         price_elements = await page.query_selector_all("span:has-text('₹')")
         print(f"Found {len(price_elements)} raw price elements")
 
@@ -53,6 +61,7 @@ async def scrape_bigbasket(product_name, headless=True):
                 price_value = float(re.sub(r"[^\d.]", "", price_text))
 
                 parent = await price_el.evaluate_handle(
+                    "el => el.closest('div').parentElement.parentElement.parentElement"
                     "el => el.closest('div').parentElement.parentElement.parentElement"
                 )
 
@@ -67,6 +76,7 @@ async def scrape_bigbasket(product_name, headless=True):
                 for line in lines:
                     line = line.strip()
                     if (
+                        len(line) > 5 and
                         len(line) > 5 and
                         "₹" not in line and
                         not any(x in line.lower() for x in ["min", "off", "sponsored", "%"])
@@ -104,8 +114,39 @@ async def scrape_bigbasket(product_name, headless=True):
                 if product_info["normalized_quantity"] is not None:
                     print(f"{name} → ₹{price_value} | {product_info['package_display']} | {product_info['unit_price_display']}")
                     extracted_products.append(product_info)
+                # Extract exact product URL
+                product_url = None
+                try:
+                    product_url_raw = await parent.evaluate(
+                        """el => {
+                            const a = el.querySelector('a[href*="/pd/"]') || el.querySelector('a') || el.closest('a');
+                            return a ? (a.getAttribute('href') || a.href) : null;
+                        }"""
+                    )
+                    if product_url_raw:
+                        product_url = urljoin("https://www.bigbasket.com", product_url_raw)
+                except Exception:
+                    pass
+
+                product_info = enrich_product_pricing(
+                    platform="bigbasket",
+                    product_name=name,
+                    price=price_value,
+                    qty_text=parent_text,
+                    delivery=20.0,
+                    eta=15,
+                    product_url=product_url,
+                )
+
+                if product_info["normalized_quantity"] is not None:
+                    print(f"{name} → ₹{price_value} | {product_info['package_display']} | {product_info['unit_price_display']}")
+                    extracted_products.append(product_info)
         
             except Exception as e:
+                print(f" Error: {e}")
+                
+        await browser.close()
+
                 print(f" Error: {e}")
                 
         await browser.close()
@@ -115,11 +156,17 @@ async def scrape_bigbasket(product_name, headless=True):
             if best_product:
                 print(f"\n Selected: {best_product['product_name']} ({best_product.get('unit_price_display')})")
                 return best_product
+            best_product = select_best_candidate(extracted_products, product_name)
+            if best_product:
+                print(f"\n Selected: {best_product['product_name']} ({best_product.get('unit_price_display')})")
+                return best_product
 
+        print(" No valid products found bb")
         print(" No valid products found bb")
         return {}
     
 async def main():
+    print("\n Testing BigBasket Scraper...\n")
     print("\n Testing BigBasket Scraper...\n")
 
     # You can change this or keep input
@@ -134,6 +181,7 @@ async def main():
 
         print("\n============================")
         print(" FINAL RESULT")
+        print(" FINAL RESULT")
         print("============================")
 
         if result:
@@ -144,13 +192,16 @@ async def main():
             print(f"Delivery   : ₹{result.get('delivery')}")
             print(f"ETA        : {result.get('eta')} mins")
             print(f"URL        : {result.get('product_url')}")
+            print(f"URL        : {result.get('product_url')}")
         else:
+            print(" No result returned bb")
             print(" No result returned bb")
 
     except Exception as e:
         print(f"ERROR in main(): {e}")
 
 
+#  RUN SCRIPT
 #  RUN SCRIPT
 if __name__ == "__main__":
     asyncio.run(main())
