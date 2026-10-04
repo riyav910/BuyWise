@@ -3,7 +3,7 @@ import json
 import sys
 from redis_client import r
 
-from scrapers.scraper import scrape_all
+from scrapers.scraper import scrape_all, HEADLESS_MODE
 
 if sys.platform == "win32":
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
@@ -47,7 +47,9 @@ def set_cache(product_name, data):
 # FETCH LOGIC (DECOUPLED)
 # =========================
 
-async def fetch_product_data(product_name, bypass_cache: bool = False, headless: bool = True):
+async def fetch_product_data(product_name, bypass_cache: bool = False, headless: bool = None):
+    if headless is None:
+        headless = HEADLESS_MODE
     product_name = product_name.lower().strip()
     print(f"\nProcessing item: {product_name} (bypass_cache={bypass_cache}, headless={headless})")
 

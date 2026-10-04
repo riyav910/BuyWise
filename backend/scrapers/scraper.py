@@ -1,6 +1,8 @@
 import asyncio
 import sys
 
+HEADLESS_MODE = True
+
 # Support running directly as script (python scrapers/scraper.py) or as imported module
 try:
     from scrapers.bigbasket import scrape_bigbasket
@@ -21,13 +23,17 @@ if sys.platform == "win32":
     asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
 
 
-async def scrape_all_platforms(product_name: str, headless: bool = False) -> list[dict]:
+async def scrape_all_platforms(product_name: str, headless: bool = None) -> list[dict]:
     """
     Main scraper coordinator.
     Scrapes all platforms in parallel with the given headless configuration.
+    Defaults to HEADLESS_MODE (single point of control).
     Returns a list of valid scraped product results.
     No outside module should call individual platform scrapers directly.
     """
+    if headless is None:
+        headless = HEADLESS_MODE
+
     product_name = product_name.lower().strip()
     print(f"\n[MAIN SCRAPER] Initiating scrape for: '{product_name}' (headless={headless})")
 
@@ -35,8 +41,8 @@ async def scrape_all_platforms(product_name: str, headless: bool = False) -> lis
         ("BigBasket", scrape_bigbasket(product_name, headless=headless)),
         ("Blinkit", scrape_blinkit(product_name, headless=headless)),
         ("Zepto", scrape_zepto(product_name, headless=headless)),
-        ("JioMart", scrape_jiomart(product_name, headless=headless)),
-        ("Instamart", scrape_instamart(product_name, headless=headless)),
+        # ("JioMart", scrape_jiomart(product_name, headless=headless)),
+        # ("Instamart", scrape_instamart(product_name, headless=headless)),
     ]
 
     names = [name for name, _ in scraper_tasks]
@@ -70,8 +76,9 @@ scrape_product = scrape_all_platforms
 # Entry point for direct testing
 async def main():
     product = input("Enter product to compare (default: milk): ").strip() or "milk"
-    headless_choice = input("Run headless? (y/n, default: y): ").strip().lower()
-    headless = headless_choice != "n"
+    default_prompt = "y" if HEADLESS_MODE else "n"
+    headless_choice = input(f"Run headless? (y/n, default: {default_prompt}): ").strip().lower()
+    headless = HEADLESS_MODE if not headless_choice else (headless_choice != "n")
 
     print(f"\nRunning main scraper for: '{product}' (headless={headless})")
     results = await scrape_all(product, headless=headless)

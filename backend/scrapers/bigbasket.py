@@ -6,9 +6,14 @@ from urllib.parse import urljoin
 from playwright.async_api import async_playwright
 
 try:
+    from scrapers.browser_utils import launch_stealth_browser
     from quantity_utils import enrich_product_pricing, parse_and_normalize_quantity, select_best_candidate
 except ImportError:
     sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    try:
+        from scrapers.browser_utils import launch_stealth_browser
+    except ImportError:
+        from browser_utils import launch_stealth_browser
     from quantity_utils import enrich_product_pricing, parse_and_normalize_quantity, select_best_candidate
 
 
@@ -17,8 +22,7 @@ async def scrape_bigbasket(product_name, headless=True):
 
     async with async_playwright() as p:
         print("Launching browser...")
-        browser = await p.chromium.launch(headless=headless)
-        page = await browser.new_page()
+        browser, context, page = await launch_stealth_browser(p, headless=headless)
 
         print("Opening BigBasket...")
         await page.goto(

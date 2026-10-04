@@ -6,9 +6,14 @@ import sys
 from urllib.parse import urljoin
 
 try:
+    from scrapers.browser_utils import launch_stealth_browser
     from quantity_utils import enrich_product_pricing, parse_and_normalize_quantity, select_best_candidate
 except ImportError:
     sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    try:
+        from scrapers.browser_utils import launch_stealth_browser
+    except ImportError:
+        from browser_utils import launch_stealth_browser
     from quantity_utils import enrich_product_pricing, parse_and_normalize_quantity, select_best_candidate
 
 
@@ -16,24 +21,35 @@ async def scrape_zepto(product_name, headless=True):
 
     async with async_playwright() as p:
 
-        browser = await p.chromium.launch(
-            headless=headless
-        )
-
-        page = await browser.new_page()
+        browser, context, page = await launch_stealth_browser(p, headless=headless)
 
         try:
+            # Set default location cookie to avoid location prompt / login prompt in headless mode
+            try:
+                await context.add_cookies([
+                    {
+                        "name": "user_address",
+                        "value": '{"city":"Bengaluru","pincode":"560001","latitude":12.9716,"longitude":77.5946,"addressLine1":"MG Road"}',
+                        "domain": ".zepto.com",
+                        "path": "/"
+                    }
+                ])
+            except Exception:
+                pass
 
             await page.goto(
                 f"https://www.zepto.com/search?query={product_name}",
-                wait_until="domcontentloaded",
-                timeout=60000
+                wait_until="networkidle",
+                timeout=45000
             )
 
-            await page.wait_for_selector(
-                'a[data-testid="product-card"], a.B4vNQ, [data-slot-id="ProductName"]',
-                timeout=40000
-            )
+            try:
+                await page.wait_for_selector(
+                    'a[data-testid="product-card"], a.B4vNQ, [data-slot-id="ProductName"]',
+                    timeout=15000
+                )
+            except Exception:
+                pass
 
             await asyncio.sleep(2)
 
@@ -222,4 +238,4 @@ async def main():
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    asyncio.run(main())

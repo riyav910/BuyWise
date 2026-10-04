@@ -129,7 +129,7 @@ async def compare_prices(request: ItemRequest):
 
             # 2. Fetch product data (runs parallel scrapers, using cache if hit)
             try:
-                data = await fetch_product_data(item_name, bypass_cache=False, headless=False)
+                data = await fetch_product_data(item_name, bypass_cache=False)
                 if data:
                     for d in data:
                         if isinstance(d, dict) and not d.get("search_term"):
