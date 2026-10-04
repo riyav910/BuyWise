@@ -141,14 +141,9 @@ async def scrape_bigbasket(product_name, headless=True):
                 if product_info["normalized_quantity"] is not None:
                     print(f"{name} → ₹{price_value} | {product_info['package_display']} | {product_info['unit_price_display']}")
                     extracted_products.append(product_info)
-        
             except Exception as e:
                 print(f" Error: {e}")
-                
-        await browser.close()
 
-                print(f" Error: {e}")
-                
         await browser.close()
 
         if extracted_products:
@@ -156,17 +151,12 @@ async def scrape_bigbasket(product_name, headless=True):
             if best_product:
                 print(f"\n Selected: {best_product['product_name']} ({best_product.get('unit_price_display')})")
                 return best_product
-            best_product = select_best_candidate(extracted_products, product_name)
-            if best_product:
-                print(f"\n Selected: {best_product['product_name']} ({best_product.get('unit_price_display')})")
-                return best_product
 
         print(" No valid products found bb")
-        print(" No valid products found bb")
         return {}
-    
+
+
 async def main():
-    print("\n Testing BigBasket Scraper...\n")
     print("\n Testing BigBasket Scraper...\n")
 
     # You can change this or keep input
