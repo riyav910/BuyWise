@@ -16,7 +16,7 @@ import CreateAccount from "./pages/CreateAccount";
 import ProfilePage from "./pages/ProfilePage";
 import { PLATFORM_META, COLORS } from "./AppContent";
 
-function mapItemToPlatform(item, bestDeal, bestUnitPrice) {
+function mapItemToPlatform(item, bestDeal, bestUnitPrice, recommendedPlatform) {
   const platformKey = (item.platform || "").toLowerCase();
   const meta = PLATFORM_META[platformKey] || {
     id: platformKey || "unknown",
@@ -40,6 +40,9 @@ function mapItemToPlatform(item, bestDeal, bestUnitPrice) {
   const isBestUnitPrice =
     bestUnitPrice?.platform?.toLowerCase() === platformKey ||
     Boolean(item.is_best_unit_price);
+  const isAssignedStore =
+    Boolean(item.is_assigned_store) ||
+    (recommendedPlatform && recommendedPlatform.toLowerCase() === platformKey);
   const packageDisplay =
     item.package_display || (item.qty && item.unit ? `${item.qty} ${item.unit}` : "");
   const unitPriceDisplay =
@@ -60,6 +63,7 @@ function mapItemToPlatform(item, bestDeal, bestUnitPrice) {
     packageDisplay,
     unitPriceDisplay,
     isBestUnitPrice,
+    isAssignedStore,
     price,
     original,
     discount: original > price ? Math.round(((original - price) / original) * 100) : 0,
@@ -81,7 +85,16 @@ function MainApp() {
   const [loading, setLoading] = useState(false);
   const [ocrLoading, setOcrLoading] = useState(false);
   const [error, setError] = useState("");
+  const [isOcrOpen, setIsOcrOpen] = useState(false);
   const navigate = useNavigate();
+
+  const handleOcrItemsSelected = (items) => {
+    if (!items || items.length === 0) return;
+    const query = items.join(", ");
+    setInput(query);
+    navigate("/compare");
+    handleCompare(query);
+  };
 
   // OCR image upload (with node-server proxy and direct fallback)
   const handleImageUpload = async (e) => {
@@ -97,15 +110,17 @@ function MainApp() {
 
     try {
       let extracted = [];
+      let res;
       try {
-        const res = await api.post("/products/parse-image", formData);
-        extracted = res.data?.items || [];
-      } catch (nodeErr) {
-        const res = await axios.post("http://127.0.0.1:8000/parse-image", formData, {
+        res = await axios.post("http://localhost:8000/parse-image", formData, {
           headers: { "Content-Type": "multipart/form-data" },
         });
-        extracted = res.data?.items || [];
+      } catch (localErr) {
+        res = await axios.post("http://127.0.0.1:8000/parse-image", formData, {
+          headers: { "Content-Type": "multipart/form-data" },
+        });
       }
+      extracted = res.data?.items || [];
 
       if (extracted.length === 0) {
         setError("No product names could be detected in this image. Please enter them manually.");
@@ -184,9 +199,10 @@ function MainApp() {
 
   // Single-product or flat platforms list fallback
   const platforms = useMemo(() => {
+    const recPlatform = result?.recommended_platform || result?.recommended_checkout?.platforms_used?.[0];
     return (
       result?.all?.map((item) =>
-        mapItemToPlatform(item, result?.best, result?.best_unit_price)
+        mapItemToPlatform(item, result?.best, result?.best_unit_price, recPlatform)
       ) || []
     );
   }, [result]);
@@ -201,7 +217,7 @@ function MainApp() {
     if (result.by_product && Object.keys(result.by_product).length > 0) {
       return Object.entries(result.by_product).map(([term, data]) => {
         const prodPlatforms = (data.all || []).map((item) =>
-          mapItemToPlatform(item, data.best, data.best_unit_price)
+          mapItemToPlatform(item, data.best, data.best_unit_price, data.recommended_platform)
         );
         const prodMaxTotal = Math.max(1, ...prodPlatforms.map((p) => p.price + p.delivery));
         return {
@@ -211,6 +227,9 @@ function MainApp() {
           platforms: prodPlatforms,
           maxTotal: prodMaxTotal,
           all: data.all || [],
+          cache_info: data.cache_info || result.cache_info || null,
+          recommended_allocation: data.recommended_allocation || null,
+          recommended_platform: data.recommended_platform || null,
         };
       });
     }
@@ -241,6 +260,9 @@ function MainApp() {
             platforms: prodPlatforms,
             maxTotal: prodMaxTotal,
             all: items,
+            cache_info: result.cache_info || null,
+            recommended_allocation: null,
+            recommended_platform: null,
           };
         });
       }
@@ -253,8 +275,32 @@ function MainApp() {
     <>
       <Navbar />
       <Routes>
-        <Route path="/" element={<HomePage onNavigate={handleNavigate} />} />
-        <Route path="/home" element={<HomePage onNavigate={handleNavigate} />} />
+        <Route
+          path="/"
+          element={
+            <HomePage
+              onNavigate={handleNavigate}
+              onOpenOcrModal={() => setIsOcrOpen(true)}
+              onCloseOcrModal={() => setIsOcrOpen(false)}
+              onToggleOcrModal={() => setIsOcrOpen((prev) => !prev)}
+              isOcrOpen={isOcrOpen}
+              onOcrItemsSelected={handleOcrItemsSelected}
+            />
+          }
+        />
+        <Route
+          path="/home"
+          element={
+            <HomePage
+              onNavigate={handleNavigate}
+              onOpenOcrModal={() => setIsOcrOpen(true)}
+              onCloseOcrModal={() => setIsOcrOpen(false)}
+              onToggleOcrModal={() => setIsOcrOpen((prev) => !prev)}
+              isOcrOpen={isOcrOpen}
+              onOcrItemsSelected={handleOcrItemsSelected}
+            />
+          }
+        />
         <Route
           path="/compare"
           element={
@@ -263,6 +309,11 @@ function MainApp() {
               setInput={setInput}
               handleCompare={handleCompare}
               handleImageUpload={handleImageUpload}
+              onOpenOcrModal={() => setIsOcrOpen(true)}
+              onCloseOcrModal={() => setIsOcrOpen(false)}
+              onToggleOcrModal={() => setIsOcrOpen((prev) => !prev)}
+              isOcrOpen={isOcrOpen}
+              onOcrItemsSelected={handleOcrItemsSelected}
               ocrLoading={ocrLoading}
               loading={loading}
               error={error}

@@ -1,5 +1,20 @@
 import asyncio
 import sys
+import time
+import warnings
+
+warnings.filterwarnings("ignore", category=ResourceWarning)
+
+def _silence_proactor_pipe_error(unraisable):
+    err = unraisable.exc_value
+    if isinstance(err, (ValueError, RuntimeError)):
+        err_msg = str(err)
+        if "I/O operation on closed pipe" in err_msg or "Event loop is closed" in err_msg:
+            return
+    if sys.__unraisablehook__:
+        sys.__unraisablehook__(unraisable)
+
+sys.unraisablehook = _silence_proactor_pipe_error
 
 HEADLESS_MODE = True
 
@@ -21,42 +36,42 @@ async def scrape_all_platforms(product_name: str, headless: bool = None) -> list
     Scrapes all platforms in parallel with the given headless configuration.
     Defaults to HEADLESS_MODE (single point of control).
     Returns a list of valid scraped product results.
-    No outside module should call individual platform scrapers directly.
     """
     if headless is None:
         headless = HEADLESS_MODE
 
     product_name = product_name.lower().strip()
-    print(f"\n[MAIN SCRAPER] Initiating scrape for: '{product_name}' (headless={headless})")
 
     scraper_tasks = [
         ("BigBasket", scrape_bigbasket(product_name, headless=headless)),
         ("Blinkit", scrape_blinkit(product_name, headless=headless)),
         ("Zepto", scrape_zepto(product_name, headless=headless)),
         # ("JioMart", scrape_jiomart(product_name, headless=headless)),
-        # ("Instamart", scrape_instamart(product_name, headless=headless)),
     ]
 
     names = [name for name, _ in scraper_tasks]
     coroutines = [coro for _, coro in scraper_tasks]
 
+    t0 = time.time()
     responses = await asyncio.gather(*coroutines, return_exceptions=True)
+    duration = time.time() - t0
 
     valid_results = []
+    summary_parts = []
 
     for name, res in zip(names, responses):
         if isinstance(res, Exception):
-            print(f"[{name}] Failed with error: {res}")
+            summary_parts.append(f"{name}: err")
             continue
 
         if isinstance(res, dict) and res.get("platform") and res.get("price") is not None:
             res["search_term"] = product_name
-            print(f"[{name}] Found: {res.get('product_name')} - Rs {res.get('price')}")
             valid_results.append(res)
+            summary_parts.append(f"{name} (₹{res.get('price')})")
         else:
-            print(f"[{name}] No valid product found.")
+            summary_parts.append(f"{name}: -")
 
-    print(f"[MAIN SCRAPER] Finished '{product_name}'. Platforms found: {len(valid_results)}/{len(scraper_tasks)}")
+    print(f"[SCRAPER] '{product_name}': {', '.join(summary_parts)} [{len(valid_results)}/{len(scraper_tasks)} in {duration:.1f}s]")
     return valid_results
 
 
@@ -79,9 +94,6 @@ async def main():
     print(f"FINAL RESULTS ({len(results)} platforms)")
     print("============================")
     for r in results:
-        pkg = r.get("package_display") or f"{r.get('qty')} {r.get('unit', '')}"
-        u_price = r.get("unit_price_display") or "N/A"
-        print(f"Platform: {r.get('platform', 'N/A'):<10} | Price: ₹{r.get('price', 0):<4} | Size: {pkg:<10} | Rate: {u_price:<8} | Del: ₹{r.get('delivery', 0)} | {r.get('product_name', 'N/A')}")
         pkg = r.get("package_display") or f"{r.get('qty')} {r.get('unit', '')}"
         u_price = r.get("unit_price_display") or "N/A"
         print(f"Platform: {r.get('platform', 'N/A'):<10} | Price: ₹{r.get('price', 0):<4} | Size: {pkg:<10} | Rate: {u_price:<8} | Del: ₹{r.get('delivery', 0)} | {r.get('product_name', 'N/A')}")

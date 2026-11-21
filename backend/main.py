@@ -7,7 +7,7 @@ from pydantic import BaseModel
 from fastapi.middleware.cors import CORSMiddleware
 
 from ocr_endpoint import router as ocr_router
-from scraper_service import r, fetch_product_data
+from scraper_service import r, fetch_product_data, fetch_product_data_with_meta
 from compare import compare_products, optimize_cart_inr
 
 app = FastAPI()
@@ -15,9 +15,19 @@ app = FastAPI()
 app.include_router(ocr_router)
 
 if sys.platform == "win32":
-    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
-    sys.stderr.reconfigure(encoding="utf-8", errors="replace")
-    asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
+    try:
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+        sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+    except Exception:
+        pass
+    try:
+        asyncio.get_running_loop()
+    except RuntimeError:
+        try:
+            if not isinstance(asyncio.get_event_loop_policy(), asyncio.WindowsProactorEventLoopPolicy):
+                asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
+        except Exception:
+            pass
 
 try:
     print("Redis ping:", r.ping())
@@ -29,7 +39,7 @@ allowed_origins = [
     origin.strip()
     for origin in os.getenv(
         "PYTHON_ALLOWED_ORIGINS",
-        "http://localhost:3000,http://localhost:5000"
+        "http://localhost:3000,http://127.0.0.1:3000,http://localhost:5000,http://127.0.0.1:5000"
     ).split(",")
     if origin.strip()
 ]
@@ -130,8 +140,9 @@ async def compare_prices(request: ItemRequest):
 
         print(f"\n[PARALLEL EXECUTION] Processing {len(processed_items)} products in parallel: {processed_items}")
 
+        cache_info_map = {}
+
         async def fetch_single_item(item_name: str):
-            print(f"Starting parallel fetch for: {item_name}")
             # 1. Record search/order query in Redis ZSET
             try:
                 r.zadd("recent_queries", {item_name: time.time()})
@@ -141,7 +152,8 @@ async def compare_prices(request: ItemRequest):
 
             # 2. Fetch product data (runs parallel scrapers, using cache if hit)
             try:
-                data = await fetch_product_data(item_name, bypass_cache=False)
+                data, cache_meta = await fetch_product_data_with_meta(item_name, bypass_cache=False)
+                cache_info_map[item_name] = cache_meta
                 if data:
                     for d in data:
                         if isinstance(d, dict) and not d.get("search_term"):
@@ -149,6 +161,11 @@ async def compare_prices(request: ItemRequest):
                 return data or []
             except Exception as e:
                 print(f"Error fetching product '{item_name}': {e}")
+                cache_info_map[item_name] = {
+                    "is_cached": False,
+                    "age_seconds": 0,
+                    "message": "Updated just now",
+                }
                 return []
 
         # Run all product extractions in parallel
@@ -174,18 +191,48 @@ async def compare_prices(request: ItemRequest):
 
         # Generate per-product comparison so frontend can display each product separately
         by_product = {}
+        alloc_map = (optimized.get("recommended_checkout") or {}).get("allocation") or {}
+
         for item_name in processed_items:
+            norm_term = item_name.lower().strip()
             prod_results = [
                 r for r in results 
-                if r.get("search_term", "").lower().strip() == item_name.lower().strip()
+                if r.get("search_term", "").lower().strip() == norm_term
             ]
+            item_cache_info = cache_info_map.get(item_name, {
+                "is_cached": False,
+                "age_seconds": 0,
+                "message": "Updated just now",
+            })
+            item_alloc = alloc_map.get(norm_term)
+
             if prod_results:
-                by_product[item_name] = compare_products(prod_results)
+                prod_comp = compare_products(prod_results)
+                prod_comp["cache_info"] = item_cache_info
+                if item_alloc:
+                    prod_comp["recommended_allocation"] = item_alloc
+                    prod_comp["recommended_platform"] = item_alloc.get("platform")
+                    rec_plat = (item_alloc.get("platform") or "").lower().strip()
+                    for cand in prod_comp.get("all", []):
+                        cand["is_assigned_store"] = (cand.get("platform", "").lower().strip() == rec_plat)
+                by_product[item_name] = prod_comp
             else:
-                by_product[item_name] = {"all": [], "best": None, "message": f"No results for {item_name}"}
+                by_product[item_name] = {
+                    "all": [],
+                    "best": None,
+                    "message": f"No results for {item_name}",
+                    "cache_info": item_cache_info,
+                    "recommended_allocation": item_alloc,
+                    "recommended_platform": item_alloc.get("platform") if item_alloc else None,
+                }
 
         final["by_product"] = by_product
         final["items"] = processed_items
+        if len(processed_items) == 1:
+            final["cache_info"] = cache_info_map.get(processed_items[0])
+            rec_checkout = optimized.get("recommended_checkout") or {}
+            final["recommended_platform"] = rec_checkout.get("platforms_used", [None])[0] if rec_checkout.get("platforms_used") else None
+            final["recommended_checkout"] = rec_checkout
 
         return final
 

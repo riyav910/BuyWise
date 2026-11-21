@@ -1,170 +1,281 @@
+
 import asyncio
 import os
 import re
 import sys
-from urllib.parse import urljoin
-import os
-import re
-import sys
-from urllib.parse import urljoin
+from urllib.parse import urljoin, quote
+
 from playwright.async_api import async_playwright
 
 try:
     from scrapers.browser_utils import launch_stealth_browser
-    from quantity_utils import enrich_product_pricing, parse_and_normalize_quantity, select_best_candidate
+    from quantity_utils import (
+        enrich_product_pricing,
+        parse_and_normalize_quantity,
+        select_best_candidate
+    )
 except ImportError:
-    sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    sys.path.append(
+        os.path.dirname(os.path.dirname(os.path.abspath(__file__))
+        )
+    )
+
     try:
         from scrapers.browser_utils import launch_stealth_browser
     except ImportError:
         from browser_utils import launch_stealth_browser
-    from quantity_utils import enrich_product_pricing, parse_and_normalize_quantity, select_best_candidate
+
+    from quantity_utils import (
+        enrich_product_pricing,
+        parse_and_normalize_quantity,
+        select_best_candidate
+    )
+
+
+BASE_URL = "https://www.bigbasket.com"
 
 
 async def scrape_bigbasket(product_name, headless=True):
-    print(f"\n[SCRAPER] Starting for: {product_name}")
-    print(f"\n[SCRAPER] Starting for: {product_name}")
-
     async with async_playwright() as p:
-        print("Launching browser...")
-        browser, context, page = await launch_stealth_browser(p, headless=headless)
-
-        print("Opening BigBasket...")
-        await page.goto(
-            f"https://www.bigbasket.com/ps/?q={product_name}",
-            wait_until="domcontentloaded",
-            timeout=60000
+        browser, context, page = await launch_stealth_browser(
+            p,
+            headless=headless
         )
 
-        print("Waiting for products...")
         try:
-            await page.wait_for_selector("span:has-text('₹')", timeout=20000)
-            await asyncio.sleep(2)
+            target_url = (
+                f"{BASE_URL}/ps/?q={quote(product_name)}"
+            )
+
+            await page.goto(
+                target_url,
+                wait_until="domcontentloaded",
+                timeout=45000
+            )
+
+            # Wait for product cards
+            try:
+                await page.wait_for_selector(
+                    'a[href*="/pd/"] img[alt]',
+                    timeout=20000
+                )
+            except Exception:
+                await page.wait_for_timeout(3000)
+
+            await page.wait_for_timeout(1500)
+
+            # Scroll to load additional products
+            for _ in range(2):
+                await page.evaluate(
+                    "window.scrollBy(0, window.innerHeight)"
+                )
+                await page.wait_for_timeout(800)
+
+            # Extract complete product cards
+            cards_data = await page.evaluate("""
+                () => {
+
+                    const cards = Array.from(
+                        document.querySelectorAll('ul.grid li')
+                    );
+
+                    return cards.map(card => {
+
+                        const productLink = card.querySelector(
+                            'a[href*="/pd/"]'
+                        );
+
+                        if (!productLink) return null;
+
+                        // Product image
+                        const image = productLink.querySelector('img');
+
+                        // Product title link
+                        const titleLink = card.querySelector(
+                            'h3 a[href*="/pd/"]'
+                        );
+
+                        // Brand
+                        const brandEl = titleLink
+                            ? titleLink.querySelector(
+                                '[class*="BrandName"]'
+                            )
+                            : null;
+
+                        const brand = brandEl
+                            ? brandEl.innerText.trim()
+                            : '';
+
+                        // Product name
+                        const nameEl = titleLink
+                            ? titleLink.querySelector('h3')
+                            : null;
+
+                        const name = nameEl
+                            ? nameEl.innerText.trim()
+                            : (image ? image.alt : '');
+
+                        // Pack size
+                        const buttons = Array.from(
+                            card.querySelectorAll('button')
+                        );
+
+                        const quantityButton = buttons.find(btn =>
+                            /\\d+(?:\\.\\d+)?\\s*(?:kg|g|gm|gms|ml|l|litre|liter|pack|piece|pcs|unit)/i
+                            .test(btn.innerText || '')
+                        );
+
+                        const quantity = quantityButton
+                            ? quantityButton.innerText.trim()
+                            : '';
+
+                        // Selling price and MRP
+                        const priceSpans = Array.from(
+                            card.querySelectorAll('span')
+                        ).filter(el =>
+                            /^₹\\s*[\\d,]+(?:\\.\\d{1,2})?$/
+                            .test(el.innerText.trim())
+                        );
+
+                        const prices = priceSpans.map(el =>
+                            parseFloat(
+                                el.innerText.replace(/[^\\d.]/g, '')
+                            )
+                        ).filter(n => !isNaN(n) && n > 0);
+
+                        // ETA
+                        const textLines = (card.innerText || '')
+                            .split('\\n')
+                            .map(t => t.trim())
+                            .filter(Boolean);
+
+                        const etaText = textLines.find(t =>
+                            /^\\d+\\s*mins?$/i.test(t)
+                        ) || '';
+
+                        // Product URL
+                        const productUrl =
+                            productLink.getAttribute('href');
+
+                        return {
+
+                            brand,
+
+                            name: name,
+
+                            fullName: [brand, name]
+                                .filter(Boolean)
+                                .join(' '),
+
+                            quantity,
+
+                            prices,
+
+                            image: image ? image.src : null,
+
+                            productUrl,
+
+                            eta: etaText
+
+                        };
+
+                    }).filter(Boolean);
+                }
+            """)
+
+            extracted_products = []
+
+            for item in cards_data:
+                try:
+                    name = item.get("fullName") or item.get("name")
+                    qty_text = item.get("quantity")
+                    prices = item.get("prices") or []
+
+                    if not name or not prices or not qty_text:
+                        continue
+
+                    # First displayed price is the selling price
+                    price_value = prices[0]
+                    if price_value <= 0:
+                        continue
+
+                    product_url = (
+                        urljoin(BASE_URL, item["productUrl"])
+                        if item.get("productUrl")
+                        else None
+                    )
+
+                    eta_match = re.search(r"(\d+)", item.get("eta") or "")
+                    eta = int(eta_match.group(1)) if eta_match else 15
+
+                    product_info = enrich_product_pricing(
+                        platform="bigbasket",
+                        product_name=name,
+                        price=price_value,
+                        qty_text=qty_text,
+                        delivery=20.0,
+                        eta=eta,
+                        product_url=product_url,
+                    )
+
+                    if product_info and product_info.get("normalized_quantity") is not None:
+                        extracted_products.append(product_info)
+
+                except Exception:
+                    continue
+
+            if not extracted_products:
+                return {}
+
+            best_product = select_best_candidate(
+                extracted_products,
+                product_name
+            )
+            return best_product or {}
+
         except Exception as e:
-            print(f"Wait timeout: {e}")
-            await browser.close()
+
+            print(f"[BIGBASKET] Scraper error: {e}")
             return {}
 
-        print("Extracting products...")
-        print("Extracting products...")
+        finally:
 
-        price_elements = await page.query_selector_all("span:has-text('₹')")
-        print(f"Found {len(price_elements)} raw price elements")
-        price_elements = await page.query_selector_all("span:has-text('₹')")
-        print(f"Found {len(price_elements)} raw price elements")
-
-        extracted_products = []
-
-        for i, price_el in enumerate(price_elements[:20]):
-            try:
-                price_text = await price_el.inner_text()
-                price_value = float(re.sub(r"[^\d.]", "", price_text))
-
-                parent = await price_el.evaluate_handle(
-                    "el => el.closest('div').parentElement.parentElement.parentElement"
-                    "el => el.closest('div').parentElement.parentElement.parentElement"
-                )
-
-                parent_text = await parent.inner_text()
-
-                if product_name.lower() not in parent_text.lower():
-                    continue
-
-                lines = parent_text.split("\n")
-                name = None
-
-                for line in lines:
-                    line = line.strip()
-                    if (
-                        len(line) > 5 and
-                        len(line) > 5 and
-                        "₹" not in line and
-                        not any(x in line.lower() for x in ["min", "off", "sponsored", "%"])
-                    ):
-                        name = line
-                        break
-
-                if not name:
-                    continue
-
-                # Extract exact product URL
-                product_url = None
-                try:
-                    product_url_raw = await parent.evaluate(
-                        """el => {
-                            const a = el.querySelector('a[href*="/pd/"]') || el.querySelector('a') || el.closest('a');
-                            return a ? (a.getAttribute('href') || a.href) : null;
-                        }"""
-                    )
-                    if product_url_raw:
-                        product_url = urljoin("https://www.bigbasket.com", product_url_raw)
-                except Exception:
-                    pass
-
-                product_info = enrich_product_pricing(
-                    platform="bigbasket",
-                    product_name=name,
-                    price=price_value,
-                    qty_text=parent_text,
-                    delivery=20.0,
-                    eta=15,
-                    product_url=product_url,
-                )
-
-                if product_info["normalized_quantity"] is not None:
-                    print(f"{name} → ₹{price_value} | {product_info['package_display']} | {product_info['unit_price_display']}")
-                    extracted_products.append(product_info)
-            except Exception as e:
-                print(f" Error: {e}")
-
-        await browser.close()
-
-        if extracted_products:
-            best_product = select_best_candidate(extracted_products, product_name)
-            if best_product:
-                print(f"\n Selected: {best_product['product_name']} ({best_product.get('unit_price_display')})")
-                return best_product
-
-        print(" No valid products found bb")
-        return {}
+            await browser.close()
 
 
 async def main():
-    print("\n Testing BigBasket Scraper...\n")
 
-    # You can change this or keep input
-    product = input("Enter product (default: milk): ").strip()
-    if not product:
-        product = "milk"
+    product = (
+        input("\nEnter product (default: milk): ").strip()
+        or "milk"
+    )
 
-    print(f"\nSearching for: {product}")
+    result = await scrape_bigbasket(
+        product,
+        headless=False
+    )
 
-    try:
-        result = await scrape_bigbasket(product)
+    if not result:
 
-        print("\n============================")
-        print(" FINAL RESULT")
-        print(" FINAL RESULT")
-        print("============================")
+        print("\nNo valid products found.")
+        return
 
-        if result:
-            print(f"Platform   : {result.get('platform')}")
-            print(f"Product    : {result.get('product_name')}")
-            print(f"Price      : ₹{result.get('price')}")
-            print(f"Quantity   : {result.get('qty')}")
-            print(f"Delivery   : ₹{result.get('delivery')}")
-            print(f"ETA        : {result.get('eta')} mins")
-            print(f"URL        : {result.get('product_url')}")
-            print(f"URL        : {result.get('product_url')}")
-        else:
-            print(" No result returned bb")
-            print(" No result returned bb")
+    print("\nBEST MATCH")
+    print("----------------------------------------")
 
-    except Exception as e:
-        print(f"ERROR in main(): {e}")
+    print(f"Product    : {result.get('product_name')}")
+    print(f"Price      : ₹{result.get('price')}")
+    print(
+        f"Quantity   : "
+        f"{result.get('package_display', result.get('qty'))}"
+    )
+    print(
+        f"Unit Price : {result.get('unit_price_display')}"
+    )
+    print(f"Delivery   : ₹{result.get('delivery')}")
+    print(f"ETA        : {result.get('eta')} mins")
+    print(f"URL        : {result.get('product_url')}")
 
 
-#  RUN SCRIPT
-#  RUN SCRIPT
 if __name__ == "__main__":
     asyncio.run(main())

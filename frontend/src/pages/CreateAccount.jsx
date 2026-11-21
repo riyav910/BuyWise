@@ -6,6 +6,7 @@ export default function CreateAccount() {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [focusedField, setFocusedField] = useState(null);
 
@@ -14,6 +15,13 @@ export default function CreateAccount() {
 
   const handleSignup = async (e) => {
     e.preventDefault();
+    setError("");
+
+    if (!password || password.length <= 6) {
+      setError("Password must contain more than 6 characters");
+      return;
+    }
+
     setLoading(true);
 
     try {
@@ -21,7 +29,7 @@ export default function CreateAccount() {
       navigate("/");
     } catch (err) {
       console.error("Signup error:", err);
-      alert(err.response?.data?.message || "Signup failed");
+      setError(err.response?.data?.message || "Signup failed");
     } finally {
       setLoading(false);
     }
@@ -411,9 +419,11 @@ export default function CreateAccount() {
                   type="password"
                   placeholder="Create a password"
                   value={password}
-                  onChange={(e) =>
-                    setPassword(e.target.value)
-                  }
+                  minLength={7}
+                  onChange={(e) => {
+                    setPassword(e.target.value);
+                    if (error) setError("");
+                  }}
                   onFocus={() =>
                     setFocusedField("password")
                   }
@@ -425,6 +435,11 @@ export default function CreateAccount() {
 
               </div>
 
+              {error && (
+                <div style={styles.errorAlert}>
+                  {error}
+                </div>
+              )}
 
               <button
                 className="bw-auth-btn"
@@ -892,6 +907,19 @@ const styles = {
 
     textAlign:
       "left",
+  },
+
+  errorAlert: {
+    padding: "11px 14px",
+    marginBottom: "18px",
+    borderRadius: "10px",
+    background: "#fef2f2",
+    border: "1px solid #fecaca",
+    color: "#b91c1c",
+    fontSize: "13px",
+    fontWeight: "500",
+    lineHeight: "1.4",
+    textAlign: "left",
   },
 
 

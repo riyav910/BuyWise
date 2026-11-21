@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { PLATFORMS, STATS, TRENDING, AnimatedCounter } from "./AppContent";
+import ListUploadModal from "./components/ListUploadModal";
 
 const placeholders = ["Search for Maggi noodles...", "Try Amul butter 500g...", "Compare Tata Tea prices..."];
 
@@ -17,7 +18,14 @@ function useReveal() {
   return [ref, visible];
 }
 
-export default function HomePage({ onNavigate }) {
+export default function HomePage({
+  onNavigate,
+  onOpenOcrModal,
+  onCloseOcrModal,
+  onToggleOcrModal,
+  isOcrOpen,
+  onOcrItemsSelected
+}) {
   const [searchQuery, setSearchQuery] = useState("");
   const [typedText, setTypedText] = useState("");
   const [alertEmail, setAlertEmail] = useState("");
@@ -98,6 +106,18 @@ export default function HomePage({ onNavigate }) {
                   placeholder={typedText}
                   className="home-search-input"
                 />
+                <button
+                  type="button"
+                  className={`home-search-cam-btn ${isOcrOpen ? "active" : ""}`}
+                  onClick={() => {
+                    if (onToggleOcrModal) onToggleOcrModal();
+                    else if (onOpenOcrModal) onOpenOcrModal();
+                  }}
+                  title="Upload or scan a photo of your grocery list"
+                  aria-label="Upload grocery list photo"
+                >
+                  📷
+                </button>
                 <span className="home-search-cursor" />
               </div>
               <button type="submit" className="home-search-submit">
@@ -105,12 +125,36 @@ export default function HomePage({ onNavigate }) {
               </button>
             </form>
 
-            
+            {/* Upload Panel appears just below the searchbar */}
+            {isOcrOpen && (
+              <div className="home-ocr-panel-wrapper">
+                <ListUploadModal
+                  isOpen={isOcrOpen}
+                  onClose={onCloseOcrModal}
+                  onItemsSelected={onOcrItemsSelected}
+                  inline={true}
+                />
+              </div>
+            )}
 
             <div className="fade-up-4 home-hero-cta">
               <button onClick={() => onNavigate && onNavigate("compare")} className="home-hero-cta-button">
                 📊 Compare prices
               </button>
+              {(onOpenOcrModal || onToggleOcrModal) && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (onToggleOcrModal) onToggleOcrModal();
+                    else if (onOpenOcrModal) onOpenOcrModal();
+                  }}
+                  className={`home-ocr-scan-btn ${isOcrOpen ? "active" : ""}`}
+                  title="Upload a photo or screenshot of your grocery list"
+                >
+                  <span>📷 {isOcrOpen ? "Close Scanner" : "Scan List Photo"}</span>
+                  <span className="home-ocr-badge">OCR</span>
+                </button>
+              )}
               <div className="home-platform-pill-row">
                 {PLATFORMS.map((p) => (
                   <div key={p.name} className={`home-platform-pill platform-pill-${p.name.toLowerCase()}`}>

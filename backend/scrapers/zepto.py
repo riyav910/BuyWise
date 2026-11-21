@@ -1,171 +1,229 @@
+
 import asyncio
-from playwright.async_api import async_playwright
 import re
 import os
 import sys
-from urllib.parse import urljoin
+from urllib.parse import urljoin, quote
+
+from playwright.async_api import async_playwright
 
 try:
     from scrapers.browser_utils import launch_stealth_browser
-    from quantity_utils import enrich_product_pricing, parse_and_normalize_quantity, select_best_candidate
+    from quantity_utils import (
+        enrich_product_pricing,
+        parse_and_normalize_quantity,
+        select_best_candidate
+    )
 except ImportError:
-    sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    sys.path.append(
+        os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    )
+
     try:
         from scrapers.browser_utils import launch_stealth_browser
     except ImportError:
         from browser_utils import launch_stealth_browser
-    from quantity_utils import enrich_product_pricing, parse_and_normalize_quantity, select_best_candidate
+
+    from quantity_utils import (
+        enrich_product_pricing,
+        parse_and_normalize_quantity,
+        select_best_candidate
+    )
+
+
+BASE_URL = "https://www.zeptonow.com"
 
 
 async def scrape_zepto(product_name, headless=True):
 
     async with async_playwright() as p:
 
-        browser, context, page = await launch_stealth_browser(p, headless=headless)
+        browser, context, page = await launch_stealth_browser(
+            p, headless=headless
+        )
 
         try:
-            # Set default location cookie to avoid location prompt / login prompt in headless mode
+            # Pre-inject location cookies for Zepto domains
             try:
                 await context.add_cookies([
                     {
-                        "name": "user_address",
-                        "value": '{"city":"Bengaluru","pincode":"560001","latitude":12.9716,"longitude":77.5946,"addressLine1":"MG Road"}',
+                        "name": "user_location",
+                        "value": "12.9716,77.5946",
+                        "domain": ".zeptonow.com",
+                        "path": "/",
+                    },
+                    {
+                        "name": "user_location",
+                        "value": "12.9716,77.5946",
                         "domain": ".zepto.com",
-                        "path": "/"
-                    }
+                        "path": "/",
+                    },
                 ])
             except Exception:
                 pass
 
+            target_url = (
+                f"{BASE_URL}/search?query={quote(product_name)}"
+            )
+
             await page.goto(
-                f"https://www.zepto.com/search?query={product_name}",
-                wait_until="networkidle",
+                target_url,
+                wait_until="domcontentloaded",
                 timeout=45000
             )
 
+            # Wait for product cards or price containers
             try:
                 await page.wait_for_selector(
-                    'a[data-testid="product-card"], a.B4vNQ, [data-slot-id="ProductName"]',
-                    timeout=15000
+                    'a[data-testid="product-card"], [data-testid="product-card"], [data-slot-id="EdlpPrice"], text=₹',
+                    timeout=20000
                 )
             except Exception:
                 pass
 
-            await asyncio.sleep(2)
+            await page.wait_for_timeout(1500)
 
-            cards = await page.query_selector_all('a[data-testid="product-card"], a.B4vNQ')
+            # Scroll to load additional lazy-loaded products
+            for _ in range(2):
+                await page.evaluate(
+                    "window.scrollBy(0, window.innerHeight)"
+                )
+                await page.wait_for_timeout(600)
+
+            # Extract product information from DOM
+            cards_data = await page.locator(
+                'a[data-testid="product-card"], div[data-testid="product-card"], a[href*="/pn/"], a[href*="/prn/"]'
+            ).evaluate_all("""
+                cards => cards.map(card => {
+                    const getText = (selector) => {
+                        const el = card.querySelector(selector);
+                        return el ? el.innerText.trim() : null;
+                    };
+
+                    const priceContainer = card.querySelector(
+                        '[data-slot-id="EdlpPrice"]'
+                    );
+
+                    const priceText = priceContainer
+                        ? priceContainer.innerText
+                        : (card.innerText || '');
+
+                    const prices = (
+                        priceText.match(/₹\\s*[\\d,.]+/g) || []
+                    ).map(p =>
+                        parseFloat(p.replace(/[^\\d.]/g, ''))
+                    ).filter(p => !isNaN(p));
+
+                    let name = getText('[data-slot-id="ProductName"]');
+                    if (!name) {
+                        const h = card.querySelector('h3, h4, h5, [data-testid="product-name"]');
+                        if (h) name = h.innerText.trim();
+                    }
+
+                    let quantity = getText('[data-slot-id="PackSize"]');
+                    if (!quantity) {
+                        const q = card.querySelector('[data-testid="product-quantity"], [data-slot-id="pack-size"]');
+                        if (q) quantity = q.innerText.trim();
+                    }
+
+                    const image = card.querySelector(
+                        '[data-slot-id="ProductImageWrapper"] img, img'
+                    );
+
+                    const productUrl = card.getAttribute('href') || (card.querySelector('a') ? card.querySelector('a').getAttribute('href') : null);
+
+                    const productContainer = card.querySelector(
+                        '[data-is-out-of-stock]'
+                    );
+
+                    const outOfStock = productContainer
+                        ? productContainer.getAttribute(
+                            'data-is-out-of-stock'
+                        ) === 'true'
+                        : (card.innerText && card.innerText.toLowerCase().includes("out of stock"));
+
+                    const eta = getText(
+                        '[data-slot-id="EtaInformation"]'
+                    );
+
+                    return {
+                        name,
+                        prices,
+                        quantity,
+                        image: image ? image.src : null,
+                        productUrl,
+                        outOfStock,
+                        eta
+                    };
+                })
+            """)
 
             extracted_products = []
+            search_words = [w for w in product_name.lower().split() if len(w) > 2]
+            stemmed_words = [w[:-1] if w.endswith('s') and len(w) > 3 else w for w in search_words]
 
-            for card in cards[:25]:
-
+            for item in cards_data:
                 try:
+                    name = item.get("name")
+                    prices = item.get("prices") or []
+                    qty_text = item.get("quantity") or name
 
-                    # NAME
-                    name_el = await card.query_selector(
-                        '[data-slot-id="ProductName"] span, [data-slot-id="ProductName"]'
-                    )
-
-                    name = (
-                        await name_el.inner_text()
-                        if name_el
-                        else None
-                    )
-                    if not name:
-                        img_el = await card.query_selector("img[alt]")
-                        if img_el:
-                            name = await img_el.get_attribute("alt")
-
-                    # PRICE: Extract discounted selling price (if multiple prices exist, e.g. MRP vs discounted, pick the lowest)
-                    price_value = None
-                    try:
-                        prices = await card.evaluate("""el => {
-                            const container = el.querySelector('[data-slot-id="EdlpPrice"]') || el;
-                            const els = Array.from(container.querySelectorAll('h4, span, div, p'));
-                            const found = [];
-                            for (const e of els) {
-                                const t = e.innerText || '';
-                                if (t.includes('₹') && !t.includes('%')) {
-                                    const m = t.match(/₹\\s*(\\d+(?:\\.\\d+)?)/);
-                                    if (m) found.push(parseFloat(m[1]));
-                                }
-                            }
-                            if (found.length === 0) {
-                                const allMatches = el.innerText.match(/₹\\s*(\\d+(?:\\.\\d+)?)/g) || [];
-                                for (const m of allMatches) {
-                                    const num = m.replace(/[^\\d.]/g, '');
-                                    if (num) found.push(parseFloat(num));
-                                }
-                            }
-                            return found;
-                        }""")
-                        if prices:
-                            price_value = min(prices)
-                    except Exception:
-                        pass
-
-                    if not price_value:
-                        price_el = await card.query_selector('[data-slot-id="EdlpPrice"]')
-                        price_text = await price_el.inner_text() if price_el else None
-                        price_value = float(re.sub(r"[^\d.]", "", price_text)) if price_text else None
-
-                    # QUANTITY
-                    qty_el = await card.query_selector(
-                        '[data-slot-id="PackSize"] span, [data-slot-id="PackSize"]'
-                    )
-
-                    qty_text = (
-                        await qty_el.inner_text()
-                        if qty_el
-                        else None
-                    )
-                    if not qty_text:
-                        raw_card = await card.inner_text()
-                        qm = re.search(r"\d+\s*(?:g|kg|ml|l|pack|piece|unit)s?", raw_card, re.I)
-                        if qm:
-                            qty_text = qm.group(0)
-
-                    if not name or not price_value:
+                    if not name or not prices:
                         continue
 
-                    keywords = product_name.lower().split()
-
-                    if not any(
-                        k in name.lower()
-                        for k in keywords
-                    ):
+                    if item.get("outOfStock"):
                         continue
 
-                    # Exact product URL from anchor
-                    product_url = None
-                    try:
-                        product_url_raw = await card.get_attribute("href") or await card.evaluate("el => el.getAttribute('href') || el.href")
-                        if product_url_raw:
-                            product_url = urljoin("https://www.zepto.com", product_url_raw)
-                    except Exception:
-                        pass
+                    price_value = min(prices)
+                    if price_value <= 0:
+                        continue
+
+                    name_lower = name.lower()
+                    matches = (
+                        product_name.lower() in name_lower
+                        or any(w in name_lower for w in search_words)
+                        or any(w in name_lower for w in stemmed_words)
+                    )
+                    if not matches:
+                        continue
+
+                    product_url = (
+                        urljoin(BASE_URL, item["productUrl"])
+                        if item.get("productUrl")
+                        else None
+                    )
 
                     product_info = enrich_product_pricing(
                         platform="zepto",
                         product_name=name,
                         price=price_value,
-                        qty_text=qty_text or name,
+                        qty_text=qty_text,
                         delivery=10.0,
                         eta=10,
                         product_url=product_url,
                     )
 
-                    if product_info["normalized_quantity"] is not None:
+                    if (
+                        product_info
+                        and product_info.get("normalized_quantity") is not None
+                    ):
                         extracted_products.append(product_info)
 
                 except Exception:
                     continue
 
-            if extracted_products:
-                best_product = select_best_candidate(extracted_products, product_name)
-                if best_product:
-                    return best_product
+            if not extracted_products:
+                return {}
 
+            best_product = select_best_candidate(
+                extracted_products,
+                product_name
+            )
+            return best_product or {}
+
+        except Exception as e:
+
+            print(f"[Zepto] Scraper error: {e}")
             return {}
 
         finally:
@@ -175,67 +233,29 @@ async def scrape_zepto(product_name, headless=True):
 async def main():
 
     product = (
-        input("\n  Product (default: milk): ")
-        .strip()
+        input("\nProduct (default: milk): ").strip()
         or "milk"
     )
 
     print("\n╭────────────────────────────────────────────╮")
-    print("│                 ZEPTO                      │")
+    print("│                  ZEPTO                     │")
     print("╰────────────────────────────────────────────╯")
 
-    print(f"\n  Searching : {product}")
+    result = await scrape_zepto(product, headless=False)
 
-    try:
+    if not result:
+        print("\nNo valid products found.")
+        return
 
-        result = await scrape_zepto(product)
+    print("\nBEST MATCH")
+    print("--------------------------------------------")
 
-        print()
-
-        if not result:
-
-            print("  ✗ No valid products found")
-            print()
-
-            return
-
-        print(f"  ✓ Product selected: {result.get('product_name')}")
-
-        print("\n  BEST MATCH")
-        print("  ──────────────────────────────────────────")
-
-        print(
-            f"  {result['product_name']}"
-        )
-
-        print(
-            f"  ₹{result['price']:.0f}  •  "
-            f"{result.get('package_display', result.get('qty'))}  •  "
-            f"{result.get('unit_price_display', '')}"
-        )
-
-        print("\n  DETAILS")
-        print("  ──────────────────────────────────────────")
-
-        print(
-            f"  Delivery : ₹{result['delivery']}"
-        )
-
-        print(
-            f"  ETA      : {result['eta']} mins"
-        )
-        print(
-            f"  URL      : {result.get('product_url')}"
-        )
-
-        print()
-
-    except Exception as e:
-
-        print("\n  ✗ Scraper error")
-        print(f"    {str(e)}")
-        print()
+    print(f"Product   : {result.get('product_name')}")
+    print(f"Price     : ₹{result.get('price')}")
+    print(f"Quantity  : {result.get('package_display', result.get('qty'))}")
+    print(f"Unit Price: {result.get('unit_price_display')}")
+    print(f"URL       : {result.get('product_url')}")
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    asyncio.run(main())

@@ -53,8 +53,17 @@ async def scrape_blinkit(product_name, headless=True):
                     )
 
                     parent_text = await parent.inner_text()
+                    p_text_lower = parent_text.lower()
 
-                    if product_name.lower() not in parent_text.lower():
+                    search_words = [w for w in product_name.lower().split() if len(w) > 2]
+                    stemmed_words = [w[:-1] if w.endswith('s') and len(w) > 3 else w for w in search_words]
+
+                    matches = (
+                        product_name.lower() in p_text_lower
+                        or any(w in p_text_lower for w in search_words)
+                        or any(w in p_text_lower for w in stemmed_words)
+                    )
+                    if not matches:
                         continue
 
                     lines = [l.strip() for l in parent_text.split("\n") if l.strip()]

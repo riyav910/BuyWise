@@ -30,10 +30,10 @@ async function register(req, res, next) {
       });
     }
 
-    if (!password || password.length < 6) {
+    if (!password || password.length <= 6) {
       return res.status(400).json({
         success: false,
-        message: "Password must contain at least 6 characters"
+        message: "Password must contain more than 6 characters"
       });
     }
 

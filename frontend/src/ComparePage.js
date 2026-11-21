@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { Badge, relatedProducts, PlatformCard, BarRow, RelatedCard } from "./AppContent";
+import ListUploadModal from "./components/ListUploadModal";
 
 function getProductEmoji(name = "") {
   const n = name.toLowerCase();
@@ -21,73 +22,277 @@ function getProductEmoji(name = "") {
 }
 
 function SmartCartOptimizerCard({ optimized, products }) {
-  if (!optimized || !optimized.split_cart) return null;
+  if (!optimized) return null;
 
-  const { split_cart, single_cart } = optimized;
-  const splitTotal = Math.round(split_cart.total_cost_inr ?? 0);
-  const singleTotal = Math.round(single_cart?.total_cost_inr ?? 0);
-  const savings = singleTotal > splitTotal ? singleTotal - splitTotal : 0;
+  const rec = optimized.recommended_checkout;
+  const single = optimized.single_cart;
+  const split = optimized.split_cart;
+
+  if (!rec && !split) return null;
+
+  // Extract totals with clean fallback
+  const totalCost = rec ? rec.total_cost : (split?.total_cost ?? split?.total_cost_inr ?? 0);
+  const itemsSubtotal = rec ? rec.items_subtotal : (split?.items_subtotal ?? split?.items_cost_inr ?? 0);
+  const deliveryTotal = rec ? rec.delivery_total : (split?.delivery_total ?? split?.delivery_cost_inr ?? 0);
+  const handlingTotal = rec ? (rec.handling_total ?? 0) : (split?.handling_total ?? 0);
+  const mode = rec?.mode || (split?.platforms?.length > 1 || split?.platforms_used?.length > 1 ? "split_store" : "single_store");
+  const isSplit = mode === "split_store";
+  const platformsUsed = rec ? (rec.platforms_used || []) : (split?.platforms || split?.platforms_used || []);
+  const savings = rec ? (rec.savings_vs_alternative ?? 0) : Math.max(0, (single?.total_cost ?? single?.total_cost_inr ?? 0) - totalCost);
+  const reason = rec?.reason || (
+    savings > 0
+      ? `Splitting order across ${platformsUsed.join(" & ")} saves ₹${Number(savings).toFixed(2)} vs single store!`
+      : `A single-store order on ${platformsUsed[0] || "one platform"} delivers the best checkout value.`
+  );
+
+  // Allocation items
+  let allocationItems = [];
+  if (rec?.allocation) {
+    allocationItems = Object.entries(rec.allocation).map(([term, data]) => ({
+      searchTerm: term,
+      name: data.product_name || term,
+      platform: data.platform,
+      price: data.product_price,
+      packagesNeeded: data.packages_needed || 1,
+      totalCost: data.total_item_cost,
+      packageDisplay: data.package_display,
+      unitPriceDisplay: data.unit_price_display,
+      productUrl: data.product_url,
+    }));
+  } else if (split?.items) {
+    allocationItems = split.items.map((item) => ({
+      searchTerm: item.search_term || item.product_name,
+      name: item.product_name || item.search_term,
+      platform: item.platform,
+      price: item.price,
+      packagesNeeded: item.packages_needed || 1,
+      totalCost: item.price * (item.packages_needed || 1),
+      packageDisplay: item.package_display,
+      unitPriceDisplay: item.unit_price_display,
+      productUrl: item.product_url,
+    }));
+  }
+
+  // Platform breakdown items
+  const breakdownEntries = rec?.platform_breakdown ? Object.entries(rec.platform_breakdown) : [];
 
   return (
     <div className="app-optimizer-card fade-up">
+      {/* HEADER */}
       <div className="app-optimizer-header">
         <div>
-          <span className="app-optimizer-badge">⚡ Smart Cart Optimizer</span>
-          <h2 className="app-optimizer-title">Cheapest Order Combination</h2>
+          <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap", marginBottom: "8px" }}>
+            <span className="app-optimizer-badge">⚡ Smart Cart Optimizer</span>
+            <span
+              style={{
+                fontSize: "12px",
+                fontWeight: 700,
+                padding: "3px 10px",
+                borderRadius: "999px",
+                background: isSplit ? "#eff6ff" : "#f0fdf4",
+                color: isSplit ? "#1d4ed8" : "#15803d",
+                border: `1px solid ${isSplit ? "#bfdbfe" : "#bbf7d0"}`,
+                textTransform: "uppercase",
+                letterSpacing: "0.05em",
+              }}
+            >
+              {isSplit ? `⚡ Split Order (${platformsUsed.length} Stores)` : `🏪 Single-Store (${platformsUsed[0]?.toUpperCase() || "1 STORE"})`}
+            </span>
+          </div>
+          <h2 className="app-optimizer-title">
+            RECOMMENDED CHECKOUT: ₹{Number(totalCost).toFixed(2)}
+          </h2>
           <p className="app-optimizer-subtitle">
-            Buy items from platforms where they are cheapest to maximize your savings across {products?.length || split_cart.items?.length} items.
+            Optimal allocation minimizing complete checkout cost (items + delivery + handling).
           </p>
         </div>
+
         <div className="app-optimizer-total-wrap">
-          <div className="app-optimizer-total-label">Optimized Split Cart</div>
-          <div className="app-optimizer-total-value">₹{splitTotal}</div>
-          <div style={{ fontSize: "12px", color: "#166534" }}>
-            (Items: ₹{Math.round(split_cart.items_cost_inr || 0)} + Del: ₹{Math.round(split_cart.delivery_cost_inr || 0)})
+          <div className="app-optimizer-total-label">Final Checkout Total</div>
+          <div className="app-optimizer-total-value">₹{Number(totalCost).toFixed(2)}</div>
+          <div style={{ fontSize: "12px", color: "#166534", marginTop: "2px" }}>
+            Items: ₹{Number(itemsSubtotal).toFixed(2)} + Del: ₹{Number(deliveryTotal).toFixed(2)}
+            {handlingTotal > 0 && ` + Fee: ₹${Number(handlingTotal).toFixed(2)}`}
           </div>
         </div>
       </div>
 
-      <div className="app-optimizer-items-grid">
-        {split_cart.items?.map((item, idx) => (
-          <div key={`split-${idx}`} className="app-optimizer-item-row">
-            <div className="app-optimizer-item-info">
-              <span className="app-optimizer-item-name">{item.product_name || item.search_term}</span>
-              <span className="app-optimizer-item-platform">
-                Buy on <strong style={{ textTransform: "capitalize", color: "#16a34a" }}>{item.platform}</strong>
-              </span>
-            </div>
-            <div style={{ textAlign: "right" }}>
-              <div style={{ fontWeight: 800, fontSize: "16px", color: "#0f172a" }}>₹{item.price}</div>
-              {item.product_url && (
-                <a
-                  href={item.product_url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  style={{ fontSize: "12px", color: "#2563eb", textDecoration: "underline" }}
-                >
-                  View ↗
-                </a>
-              )}
-            </div>
-          </div>
-        ))}
-      </div>
-
+      {/* SAVINGS / STRATEGIC BANNER */}
       {savings > 0 ? (
-        <div className="app-optimizer-savings-banner">
-          <span>
-            🎉 <strong>Save ₹{savings}</strong> by splitting order across {split_cart.platforms_used?.join(" & ")} vs single store ({single_cart?.platform || "best single store"}: ₹{singleTotal})!
-          </span>
-          <Badge variant="accent">Best Split Deal</Badge>
+        <div className="app-optimizer-savings-banner" style={{ marginBottom: "20px" }}>
+          <div>
+            <div style={{ fontSize: "15px", fontWeight: 800 }}>
+              🎉 Save ₹{Number(savings).toFixed(2)} with Recommended Allocation
+            </div>
+            <div style={{ fontSize: "13px", opacity: 0.95, marginTop: "2px" }}>
+              {reason}
+            </div>
+          </div>
+          <Badge variant="accent">Best Allocation Deal</Badge>
         </div>
-      ) : single_cart ? (
-        <div className="app-optimizer-savings-banner" style={{ background: "#166534" }}>
-          <span>
-            ✅ <strong>Single Store Recommended:</strong> Buying everything on <strong style={{ textTransform: "capitalize" }}>{single_cart.platform}</strong> costs ₹{singleTotal} with single delivery.
-          </span>
-          <Badge variant="success">Single Delivery Winner</Badge>
+      ) : (
+        <div className="app-optimizer-savings-banner" style={{ background: "#166534", marginBottom: "20px" }}>
+          <div>
+            <div style={{ fontSize: "14px", fontWeight: 700 }}>
+              ✅ Optimal Checkout Total
+            </div>
+            <div style={{ fontSize: "13px", opacity: 0.95, marginTop: "2px" }}>
+              {reason}
+            </div>
+          </div>
+          <Badge variant="success">Consolidation Winner</Badge>
         </div>
-      ) : null}
+      )}
+
+      {/* ALTERNATIVE COMPARISON CHIPS */}
+      {(single?.total_cost || split?.total_cost) && (
+        <div
+          style={{
+            display: "flex",
+            gap: "12px",
+            flexWrap: "wrap",
+            marginBottom: "20px",
+            background: "#ffffff",
+            padding: "12px 16px",
+            borderRadius: "14px",
+            border: "1px solid #bbf7d0",
+            alignItems: "center",
+          }}
+        >
+          <div style={{ fontSize: "12px", fontWeight: 700, color: "#475569", textTransform: "uppercase" }}>
+            Compare Options:
+          </div>
+          <div
+            style={{
+              padding: "6px 12px",
+              borderRadius: "8px",
+              background: "#dcfce7",
+              border: "1px solid #86efac",
+              fontSize: "13px",
+              fontWeight: 700,
+              color: "#166534",
+            }}
+          >
+            🏆 Recommended: ₹{Number(totalCost).toFixed(2)}
+          </div>
+          {single && (
+            <div
+              style={{
+                padding: "6px 12px",
+                borderRadius: "8px",
+                background: !isSplit ? "#dcfce7" : "#f8fafc",
+                border: "1px solid #e2e8f0",
+                fontSize: "13px",
+                color: "#334155",
+              }}
+            >
+              🏪 Best Single-Store ({single.platform?.toUpperCase()}): <strong>₹{Number(single.total_cost ?? single.total_cost_inr).toFixed(2)}</strong>
+            </div>
+          )}
+          {split && split.total_cost && (
+            <div
+              style={{
+                padding: "6px 12px",
+                borderRadius: "8px",
+                background: isSplit ? "#dcfce7" : "#f8fafc",
+                border: "1px solid #e2e8f0",
+                fontSize: "13px",
+                color: "#334155",
+              }}
+            >
+              ⚡ Split Cart ({split.platforms ? split.platforms.join(" + ").toUpperCase() : "MULTI"}): <strong>₹{Number(split.total_cost ?? split.total_cost_inr).toFixed(2)}</strong>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* STORE-BY-STORE BREAKDOWN */}
+      {breakdownEntries.length > 0 && (
+        <div style={{ marginBottom: "20px" }}>
+          <div style={{ fontSize: "13px", fontWeight: 700, color: "#166534", marginBottom: "10px", textTransform: "uppercase", letterSpacing: "0.04em" }}>
+            Platform Cost Breakdown
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: "10px" }}>
+            {breakdownEntries.map(([pName, pData]) => (
+              <div
+                key={`breakdown-${pName}`}
+                style={{
+                  background: "#ffffff",
+                  border: "1px solid #bbf7d0",
+                  borderRadius: "12px",
+                  padding: "12px 14px",
+                }}
+              >
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "6px" }}>
+                  <span style={{ fontWeight: 800, textTransform: "capitalize", color: "#0f172a", fontSize: "14px" }}>
+                    {pName}
+                  </span>
+                  <span style={{ fontSize: "11px", fontWeight: 700, color: "#16a34a", background: "#f0fdf4", padding: "2px 6px", borderRadius: "6px" }}>
+                    {pData.items_count} item{pData.items_count > 1 ? "s" : ""}
+                  </span>
+                </div>
+                <div style={{ fontSize: "12px", color: "#475569", lineHeight: "1.6" }}>
+                  <div>Items: <strong>₹{Number(pData.items_subtotal).toFixed(2)}</strong></div>
+                  <div>
+                    Delivery: <strong>{pData.delivery_fee === 0 ? "FREE" : `₹${Number(pData.delivery_fee).toFixed(2)}`}</strong>
+                    {pData.free_delivery_applied && <span style={{ color: "#16a34a", marginLeft: "4px" }}>🟢</span>}
+                  </div>
+                  {pData.amount_needed_for_free_delivery > 0 && (
+                    <div style={{ fontSize: "11px", color: "#d97706" }}>
+                      (Add ₹{Number(pData.amount_needed_for_free_delivery).toFixed(2)} for free delivery)
+                    </div>
+                  )}
+                  {pData.handling_fee > 0 && <div>Handling: <strong>₹{Number(pData.handling_fee).toFixed(2)}</strong></div>}
+                </div>
+                <div style={{ marginTop: "8px", paddingTop: "6px", borderTop: "1px dashed #e2e8f0", display: "flex", justifyContent: "space-between", fontWeight: 800, fontSize: "13px", color: "#15803d" }}>
+                  <span>Store Total:</span>
+                  <span>₹{Number(pData.total).toFixed(2)}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* PRODUCT ALLOCATION GRID */}
+      <div>
+        <div style={{ fontSize: "13px", fontWeight: 700, color: "#166534", marginBottom: "10px", textTransform: "uppercase", letterSpacing: "0.04em" }}>
+          Assigned Product Allocation ({allocationItems.length} items)
+        </div>
+        <div className="app-optimizer-items-grid" style={{ marginBottom: 0 }}>
+          {allocationItems.map((item, idx) => (
+            <div key={`alloc-${idx}`} className="app-optimizer-item-row">
+              <div className="app-optimizer-item-info">
+                <span className="app-optimizer-item-name">{item.name}</span>
+                <span className="app-optimizer-item-platform">
+                  Assigned Store: <strong style={{ textTransform: "capitalize", color: "#16a34a" }}>{item.platform}</strong>
+                </span>
+                {item.packageDisplay && (
+                  <span style={{ fontSize: "11px", color: "#64748b", marginTop: "2px" }}>
+                    Qty: {item.packagesNeeded > 1 ? `${item.packagesNeeded} x ` : ""}{item.packageDisplay}
+                    {item.unitPriceDisplay && ` (${item.unitPriceDisplay})`}
+                  </span>
+                )}
+              </div>
+              <div style={{ textAlign: "right", minWidth: "70px" }}>
+                <div style={{ fontWeight: 800, fontSize: "16px", color: "#0f172a" }}>
+                  ₹{Number(item.totalCost ?? item.price).toFixed(2)}
+                </div>
+                {item.productUrl && (
+                  <a
+                    href={item.productUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    style={{ fontSize: "12px", color: "#2563eb", textDecoration: "underline", display: "inline-block", marginTop: "2px" }}
+                  >
+                    View ↗
+                  </a>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
     </div>
   );
 }
@@ -102,11 +307,55 @@ function ProductSection({ prod, index, totalCount }) {
         <div className="app-product-title-row">
           <div className="app-product-emoji-badge">{emoji}</div>
           <div>
-            <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
               <h2 className="app-product-title">{prod.term}</h2>
               <span className="app-product-counter-tag">
                 {index + 1} of {totalCount}
               </span>
+              {prod.recommended_platform && (
+                <span
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: "5px",
+                    fontSize: "12px",
+                    fontWeight: 700,
+                    padding: "3px 10px",
+                    borderRadius: "999px",
+                    background: "#ecfdf5",
+                    color: "#0f766e",
+                    border: "1px solid #99f6e4",
+                  }}
+                  title={`Cart Optimizer assigned ${prod.recommended_platform} for lowest overall order checkout`}
+                >
+                  <span>🎯 Assigned Store:</span>
+                  <strong style={{ textTransform: "capitalize" }}>{prod.recommended_platform}</strong>
+                </span>
+              )}
+              {prod.cache_info && (
+                <span
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: "5px",
+                    fontSize: "12px",
+                    fontWeight: 600,
+                    padding: "3px 10px",
+                    borderRadius: "999px",
+                    background: prod.cache_info.is_cached ? "#f0fdf4" : "#f1f5f9",
+                    color: prod.cache_info.is_cached ? "#15803d" : "#475569",
+                    border: `1px solid ${prod.cache_info.is_cached ? "#bbf7d0" : "#e2e8f0"}`,
+                  }}
+                  title={
+                    prod.cache_info.is_cached
+                      ? `Served from BuyWise cache (${prod.cache_info.tier || "catalog"} tier, TTL: ${prod.cache_info.ttl || 120}s)`
+                      : "Scraped live from quick-commerce stores"
+                  }
+                >
+                  <span>{prod.cache_info.is_cached ? "⚡" : "🟢"}</span>
+                  <span>{prod.cache_info.message || (prod.cache_info.is_cached ? `Updated ${prod.cache_info.age_seconds}s ago` : "Updated just now")}</span>
+                </span>
+              )}
             </div>
             <div style={{ fontSize: "13px", color: "#64748b", marginTop: "2px" }}>
               Compared across {prod.platforms?.length || 0} quick-commerce platforms
@@ -116,7 +365,7 @@ function ProductSection({ prod, index, totalCount }) {
 
         {prod.best && (
           <div style={{ textAlign: "right" }}>
-            <div className="app-highlight-label" style={{ color: "#166534" }}>Best Deal for {prod.term}</div>
+            <div className="app-highlight-label" style={{ color: "#166534" }}>Cheapest Item Price</div>
             <div style={{ display: "flex", alignItems: "baseline", gap: "6px", justifyContent: "flex-end" }}>
               <span style={{ fontSize: "16px", fontWeight: 700, textTransform: "capitalize", color: "#15803d" }}>
                 {prod.best.platform}
@@ -200,6 +449,11 @@ export default function ComparePage({
   setInput,
   handleCompare,
   handleImageUpload,
+  onOpenOcrModal,
+  onCloseOcrModal,
+  onToggleOcrModal,
+  isOcrOpen,
+  onOcrItemsSelected,
   loading,
   error,
   result,
@@ -227,14 +481,54 @@ export default function ComparePage({
                 if (e.key === "Enter") handleCompare();
               }}
             />
+            <button
+              type="button"
+              className={`compare-search-cam-btn ${isOcrOpen ? "active" : ""}`}
+              onClick={() => {
+                if (onToggleOcrModal) onToggleOcrModal();
+                else if (onOpenOcrModal) onOpenOcrModal();
+              }}
+              title="Upload or scan a photo of your shopping list"
+              aria-label="Upload shopping list photo"
+            >
+              📷
+            </button>
           </div>
-          {handleImageUpload && (
-            <input type="file" accept="image/*" onChange={handleImageUpload} />
+          {(onOpenOcrModal || onToggleOcrModal) ? (
+            <button
+              type="button"
+              className={`compare-ocr-scan-btn ${isOcrOpen ? "active" : ""}`}
+              onClick={() => {
+                if (onToggleOcrModal) onToggleOcrModal();
+                else if (onOpenOcrModal) onOpenOcrModal();
+              }}
+              title="Upload and scan a photo of your typed shopping list"
+            >
+              <span>📷 {isOcrOpen ? "Close Scanner" : "Scan List Photo"}</span>
+            </button>
+          ) : (
+            handleImageUpload && (
+              <input type="file" accept="image/*" onChange={handleImageUpload} />
+            )
           )}
           <button className="app-button app-button-primary" onClick={() => handleCompare()}>
             {loading ? "Comparing..." : "Compare"}
           </button>
         </div>
+
+        {/* Upload panel drops down just below the searchbar in the header */}
+        {isOcrOpen && (
+          <div className="compare-ocr-dropdown-wrap">
+            <div className="compare-ocr-dropdown-inner">
+              <ListUploadModal
+                isOpen={isOcrOpen}
+                onClose={onCloseOcrModal}
+                onItemsSelected={onOcrItemsSelected}
+                belowHeader={true}
+              />
+            </div>
+          </div>
+        )}
       </header>
 
       <div className="app-hero-strip">
@@ -247,7 +541,29 @@ export default function ComparePage({
           <div>
             <h1 className="app-hero-title">Compare grocery prices instantly</h1>
             <p className="app-hero-copy">
-              Enter product names separated by commas (e.g., <strong>milk, bread, eggs</strong>) to extract and compare all items in parallel across Blinkit, Zepto, BigBasket, and JioMart.
+              Enter product names separated by commas (e.g., <strong>milk, bread, eggs</strong>) or{" "}
+              {(onOpenOcrModal || onToggleOcrModal) && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    window.scrollTo({ top: 0, behavior: "smooth" });
+                    if (onOpenOcrModal) onOpenOcrModal();
+                  }}
+                  style={{
+                    background: "none",
+                    border: "none",
+                    color: "#16a34a",
+                    textDecoration: "underline",
+                    cursor: "pointer",
+                    padding: 0,
+                    fontWeight: 600,
+                    font: "inherit",
+                  }}
+                >
+                  upload a photo of your list
+                </button>
+              )}
+              {" "}to extract and compare all items in parallel across Blinkit, Zepto, BigBasket, and JioMart.
             </p>
             <div className="app-hero-badges">
               <Badge variant="info">Parallel extraction</Badge>
@@ -274,14 +590,14 @@ export default function ComparePage({
                     <span className="app-product-tab-pill">{products.length}</span>
                   </button>
 
-                  {result.optimized?.split_cart && (
+                  {result.optimized && (result.optimized.recommended_checkout || result.optimized.split_cart) && (
                     <button
                       className={`app-product-tab ${activeTab === "optimizer" ? "app-product-tab--active" : ""}`}
                       onClick={() => setActiveTab("optimizer")}
                     >
-                      <span>⚡ Smart Split Cart</span>
+                      <span>⚡ Smart Cart</span>
                       <span className="app-product-tab-pill">
-                        ₹{Math.round(result.optimized.split_cart.total_cost_inr || 0)}
+                        ₹{Number(result.optimized.recommended_checkout?.total_cost ?? result.optimized.split_cart?.total_cost ?? result.optimized.split_cart?.total_cost_inr ?? 0).toFixed(2)}
                       </span>
                     </button>
                   )}
@@ -348,7 +664,47 @@ export default function ComparePage({
               <>
                 <div className="app-highlight-panel fade-up">
                   <div>
-                    <div className="app-highlight-label">Best order deal</div>
+                    <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap", marginBottom: "4px" }}>
+                      <div className="app-highlight-label" style={{ marginBottom: 0 }}>Best order deal</div>
+                      {result.recommended_platform && (
+                        <span
+                          style={{
+                            display: "inline-flex",
+                            alignItems: "center",
+                            gap: "4px",
+                            fontSize: "11px",
+                            fontWeight: 700,
+                            padding: "2px 8px",
+                            borderRadius: "999px",
+                            background: "#ecfdf5",
+                            color: "#0f766e",
+                            border: "1px solid #99f6e4",
+                          }}
+                        >
+                          <span>🎯 Assigned:</span>
+                          <strong style={{ textTransform: "capitalize" }}>{result.recommended_platform}</strong>
+                        </span>
+                      )}
+                      {result.cache_info && (
+                        <span
+                          style={{
+                            display: "inline-flex",
+                            alignItems: "center",
+                            gap: "4px",
+                            fontSize: "11px",
+                            fontWeight: 600,
+                            padding: "2px 8px",
+                            borderRadius: "999px",
+                            background: result.cache_info.is_cached ? "#f0fdf4" : "#f1f5f9",
+                            color: result.cache_info.is_cached ? "#15803d" : "#475569",
+                            border: `1px solid ${result.cache_info.is_cached ? "#bbf7d0" : "#e2e8f0"}`,
+                          }}
+                        >
+                          <span>{result.cache_info.is_cached ? "⚡" : "🟢"}</span>
+                          <span>{result.cache_info.message || (result.cache_info.is_cached ? `Updated ${result.cache_info.age_seconds}s ago` : "Updated just now")}</span>
+                        </span>
+                      )}
+                    </div>
                     <div className="app-highlight-value">{result.best?.platform || "No valid result"}</div>
                     {result.best?.product_url && (
                       <div style={{ marginTop: "4px" }}>
@@ -378,6 +734,12 @@ export default function ComparePage({
                     <div className="app-highlight-total">{result.best ? `₹${result.best.price + (result.best.delivery ?? 0)}` : "—"}</div>
                   </div>
                 </div>
+
+                {result.optimized?.recommended_checkout && (
+                  <div style={{ marginTop: "20px" }}>
+                    <SmartCartOptimizerCard optimized={result.optimized} products={[{ term: input || "item" }]} />
+                  </div>
+                )}
 
                 <div className="app-section-label">Platform comparison</div>
                 <div className="app-platforms-grid">

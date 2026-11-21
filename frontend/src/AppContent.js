@@ -159,6 +159,24 @@ export function PlatformCard({ item }) {
           </div>
         </div>
         <div style={{ display: "flex", gap: "4px", flexWrap: "wrap", justifyContent: "flex-end" }}>
+          {item.isAssignedStore && (
+            <span
+              style={{
+                background: "#0f766e",
+                color: "#ffffff",
+                fontSize: "11px",
+                fontWeight: 700,
+                padding: "2px 8px",
+                borderRadius: "999px",
+                display: "inline-flex",
+                alignItems: "center",
+                gap: "3px",
+              }}
+              title="Recommended store assigned by Cart Optimizer for best overall checkout total"
+            >
+              🎯 Assigned
+            </span>
+          )}
           {item.best && <Badge variant="success">Best deal</Badge>}
           {item.isBestUnitPrice && <Badge variant="info">Best unit rate</Badge>}
         </div>

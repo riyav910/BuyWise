@@ -64,7 +64,7 @@ test("registration rejects weak passwords before database access", async () => {
 
   assert.equal(response.status, 400);
   assert.equal(response.body.success, false);
-  assert.equal(response.body.message, "Password must contain at least 6 characters");
+  assert.equal(response.body.message, "Password must contain more than 6 characters");
 });
 
 test("authentication lifecycle supports register, login, me, and logout", async () => {

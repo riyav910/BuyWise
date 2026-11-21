@@ -5,6 +5,7 @@
   "private": true,
   "scripts": {
     "test": "node --test test/*.test.js",
+    "seed:catalog": "node src/scripts/seedCatalog.js",
     "dev": "nodemon src/server.js",
     "start": "node src/server.js"
   },
