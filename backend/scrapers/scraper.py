@@ -52,6 +52,7 @@ async def scrape_all_platforms(product_name: str, headless: bool = None) -> list
     names = [name for name, _ in scraper_tasks]
     coroutines = [coro for _, coro in scraper_tasks]
 
+    print(f"[SCRAPER] Starting parallel extraction for '{product_name}' on BigBasket, Blinkit, and Zepto (takes ~15-25s)...")
     t0 = time.time()
     responses = await asyncio.gather(*coroutines, return_exceptions=True)
     duration = time.time() - t0

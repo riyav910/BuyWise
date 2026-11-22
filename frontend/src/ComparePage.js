@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Badge, relatedProducts, PlatformCard, BarRow, RelatedCard } from "./AppContent";
 import ListUploadModal from "./components/ListUploadModal";
+import api from "./api";
 
 function getProductEmoji(name = "") {
   const n = name.toLowerCase();
@@ -22,6 +23,9 @@ function getProductEmoji(name = "") {
 }
 
 function SmartCartOptimizerCard({ optimized, products }) {
+  const [orderSaving, setOrderSaving] = useState(false);
+  const [orderMessage, setOrderMessage] = useState("");
+
   if (!optimized) return null;
 
   const rec = optimized.recommended_checkout;
@@ -75,6 +79,39 @@ function SmartCartOptimizerCard({ optimized, products }) {
 
   // Platform breakdown items
   const breakdownEntries = rec?.platform_breakdown ? Object.entries(rec.platform_breakdown) : [];
+
+  const handleSaveOrder = async () => {
+    setOrderSaving(true);
+    setOrderMessage("");
+    try {
+      const payload = {
+        items: allocationItems.map((i) => ({
+          name: i.name,
+          platform: i.platform,
+          price: i.price,
+          quantity: i.packagesNeeded || 1,
+          packageDisplay: i.packageDisplay,
+          productUrl: i.productUrl
+        })),
+        platformsUsed,
+        itemsSubtotal,
+        deliveryTotal,
+        totalAmount: totalCost,
+        savingsAmount: savings,
+        orderMode: mode
+      };
+      await api.post("/user/orders", payload);
+      setOrderMessage("✅ Order saved to your profile!");
+    } catch (err) {
+      if (err.response?.status === 401) {
+        setOrderMessage("⚠️ Please log in to save orders to your profile.");
+      } else {
+        setOrderMessage(err.response?.data?.message || "Failed to save order.");
+      }
+    } finally {
+      setOrderSaving(false);
+    }
+  };
 
   return (
     <div className="app-optimizer-card fade-up">
@@ -292,6 +329,24 @@ function SmartCartOptimizerCard({ optimized, products }) {
             </div>
           ))}
         </div>
+      </div>
+
+      {/* Save Order CTA */}
+      <div style={{ marginTop: "20px", display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: "10px", borderTop: "1px dashed #cbd5e1", paddingTop: "14px" }}>
+        <button
+          type="button"
+          className="app-button app-button-primary"
+          onClick={handleSaveOrder}
+          disabled={orderSaving}
+          style={{ fontSize: "13px", padding: "8px 18px", borderRadius: "10px", cursor: orderSaving ? "not-allowed" : "pointer" }}
+        >
+          {orderSaving ? "Saving..." : "💾 Save Order to Profile"}
+        </button>
+        {orderMessage && (
+          <span style={{ fontSize: "13px", fontWeight: "600", color: orderMessage.startsWith("✅") ? "#15803d" : "#b91c1c" }}>
+            {orderMessage}
+          </span>
+        )}
       </div>
     </div>
   );

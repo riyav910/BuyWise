@@ -147,8 +147,8 @@ async def compare_prices(request: ItemRequest):
             try:
                 r.zadd("recent_queries", {item_name: time.time()})
                 r.zremrangebyrank("recent_queries", 0, -101)  # Limit to 100 items
-            except Exception as e:
-                print(f"Redis ZSET log error for {item_name}: {e}")
+            except Exception:
+                pass
 
             # 2. Fetch product data (runs parallel scrapers, using cache if hit)
             try:
