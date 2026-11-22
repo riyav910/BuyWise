@@ -76,15 +76,22 @@ if (-not (Test-Path $ngrokExe)) {
     if ($ngrokCmd) { $ngrokExe = "ngrok" } else { $ngrokExe = $null }
 }
 
-# Read NGROK_AUTHTOKEN and NGROK_DOMAIN from .env if present
-$envFile = Join-Path $scriptDir ".env"
-if (Test-Path $envFile) {
-    Get-Content $envFile | ForEach-Object {
-        if ($_ -match '^\s*NGROK_AUTHTOKEN\s*=\s*(.+)$') {
-            $env:NGROK_AUTHTOKEN = $matches[1].Trim()
-        }
-        if ($_ -match '^\s*NGROK_DOMAIN\s*=\s*(.+)$') {
-            $env:NGROK_DOMAIN = $matches[1].Trim()
+# Read NGROK_AUTHTOKEN and NGROK_DOMAIN from backend/.env or node-server/.env
+$envCandidates = @(
+    (Join-Path $scriptDir ".env"),
+    (Join-Path $scriptDir "node-server\.env"),
+    (Join-Path (Split-Path -Parent $scriptDir) "backend\.env"),
+    (Join-Path (Split-Path -Parent $scriptDir) "backend\node-server\.env")
+)
+foreach ($ef in $envCandidates) {
+    if (Test-Path $ef) {
+        Get-Content $ef | ForEach-Object {
+            if ($_ -match '^\s*NGROK_AUTHTOKEN\s*=\s*(.+)$') {
+                $env:NGROK_AUTHTOKEN = $matches[1].Trim()
+            }
+            if ($_ -match '^\s*NGROK_DOMAIN\s*=\s*(.+)$') {
+                $env:NGROK_DOMAIN = $matches[1].Trim()
+            }
         }
     }
 }
@@ -96,8 +103,10 @@ if ($env:NGROK_AUTHTOKEN -and $ngrokExe) {
 $ngrokDomain = $env:NGROK_DOMAIN
 
 if ($ngrokExe -and $ngrokDomain) {
-    Write-Host "Connecting via ngrok with permanent static domain: https://$ngrokDomain..." -ForegroundColor Cyan
-    & $ngrokExe http --domain=$ngrokDomain 8000
+    $cleanDomain = $ngrokDomain.Trim().ToLower().Replace("https://", "").Replace("http://", "").TrimEnd("/")
+    $targetUrl = "https://$cleanDomain"
+    Write-Host "Connecting via ngrok on permanent domain: $targetUrl..." -ForegroundColor Cyan
+    & $ngrokExe http 8000 --url $targetUrl
 } elseif ($ngrokExe -and $env:NGROK_AUTHTOKEN) {
     Write-Host "Connecting via ngrok..." -ForegroundColor Cyan
     & $ngrokExe http 8000
