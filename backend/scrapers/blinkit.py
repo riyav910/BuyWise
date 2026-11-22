@@ -17,9 +17,9 @@ except ImportError:
     from quantity_utils import enrich_product_pricing, parse_and_normalize_quantity, select_best_candidate
 
 
-async def scrape_blinkit(product_name, headless=True):
+async def scrape_blinkit(product_name, headless=True, lat=12.9716, lon=77.5946):
     async with async_playwright() as p:
-        browser, context, page = await launch_stealth_browser(p, headless=headless)
+        browser, context, page = await launch_stealth_browser(p, headless=headless, lat=lat, lon=lon)
 
         try:
             await page.goto(

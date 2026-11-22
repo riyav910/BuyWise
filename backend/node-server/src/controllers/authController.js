@@ -7,13 +7,15 @@ function publicUser(user) {
   return {
     id: user._id.toString(),
     name: user.name,
-    email: user.email
+    email: user.email,
+    pincode: user.pincode || "560001",
+    city: user.city || "Bangalore"
   };
 }
 
 async function register(req, res, next) {
   try {
-    const { name, email, password } = req.body;
+    const { name, email, password, pincode, city } = req.body;
     const normalizedEmail = email?.trim().toLowerCase();
 
     if (!name || name.trim().length < 2) {
@@ -49,7 +51,9 @@ async function register(req, res, next) {
     const user = await User.create({
       name: name.trim(),
       email: normalizedEmail,
-      passwordHash
+      passwordHash,
+      pincode: pincode?.trim() || "560001",
+      city: city?.trim() || "Bangalore"
     });
 
     setAuthCookie(res, createToken(user._id.toString()));

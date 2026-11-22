@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect, useCallback } from "react";
 import axios from "axios";
+import api from "../api";
 
 const PRESET_LISTS = [
   {
@@ -124,13 +125,19 @@ export default function ListUploadModal({
       setScanStatus("Connecting to OCR engine...");
       let res;
       try {
-        res = await axios.post("http://localhost:8000/parse-image", formData, {
+        res = await api.post("/products/parse-image", formData, {
           headers: { "Content-Type": "multipart/form-data" },
         });
-      } catch (localErr) {
-        res = await axios.post("http://127.0.0.1:8000/parse-image", formData, {
-          headers: { "Content-Type": "multipart/form-data" },
-        });
+      } catch (proxyErr) {
+        try {
+          res = await axios.post("http://localhost:8000/parse-image", formData, {
+            headers: { "Content-Type": "multipart/form-data" },
+          });
+        } catch (localErr) {
+          res = await axios.post("http://127.0.0.1:8000/parse-image", formData, {
+            headers: { "Content-Type": "multipart/form-data" },
+          });
+        }
       }
 
       const data = res.data;

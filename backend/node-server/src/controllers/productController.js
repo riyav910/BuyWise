@@ -7,7 +7,10 @@ async function compare(req, res, next) {
     const {
       items,
       required_quantity: requiredQuantity,
-      required_unit: requiredUnit
+      required_unit: requiredUnit,
+      pincode,
+      latitude,
+      longitude
     } = req.body;
 
     if (!Array.isArray(items) || items.length === 0) {
@@ -20,7 +23,10 @@ async function compare(req, res, next) {
     const result = await compareProducts(
       items,
       requiredQuantity,
-      requiredUnit
+      requiredUnit,
+      pincode,
+      latitude,
+      longitude
     );
 
     if (result.error || result.message) {

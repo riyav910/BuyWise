@@ -1,6 +1,7 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Badge, relatedProducts, PlatformCard, BarRow, RelatedCard } from "./AppContent";
 import ListUploadModal from "./components/ListUploadModal";
+import ScraperProgressCard from "./components/ScraperProgressCard";
 
 function getProductEmoji(name = "") {
   const n = name.toLowerCase();
@@ -463,6 +464,19 @@ export default function ComparePage({
   onNavigate,
 }) {
   const [activeTab, setActiveTab] = useState("all");
+  const [loadingPhase, setLoadingPhase] = useState("scraping");
+
+  useEffect(() => {
+    if (!loading) {
+      setLoadingPhase("scraping");
+      return;
+    }
+    setLoadingPhase("scraping");
+    const timer = setTimeout(() => {
+      setLoadingPhase("comparing");
+    }, 2800);
+    return () => clearTimeout(timer);
+  }, [loading]);
 
   const isMulti = products && products.length > 1;
 
@@ -511,8 +525,18 @@ export default function ComparePage({
               <input type="file" accept="image/*" onChange={handleImageUpload} />
             )
           )}
-          <button className="app-button app-button-primary" onClick={() => handleCompare()}>
-            {loading ? "Comparing..." : "Compare"}
+          <button
+            className="app-button app-button-primary"
+            onClick={() => handleCompare()}
+            disabled={loading}
+            style={{
+              opacity: loading ? 0.85 : 1,
+              cursor: loading ? "wait" : "pointer",
+              minWidth: "125px",
+              transition: "all 0.2s ease",
+            }}
+          >
+            {loading ? (loadingPhase === "comparing" ? "Optimizing..." : "Scraping...") : "Compare"}
           </button>
         </div>
 
@@ -575,7 +599,9 @@ export default function ComparePage({
 
         {error && <div className="app-alert">{error}</div>}
 
-        {result ? (
+        {loading ? (
+          <ScraperProgressCard searchQuery={input} loadingPhase={loadingPhase} />
+        ) : result ? (
           <>
             {isMulti ? (
               /* ================= MULTI-PRODUCT VIEW ================= */

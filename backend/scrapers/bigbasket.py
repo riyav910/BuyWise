@@ -35,11 +35,13 @@ except ImportError:
 BASE_URL = "https://www.bigbasket.com"
 
 
-async def scrape_bigbasket(product_name, headless=True):
+async def scrape_bigbasket(product_name, headless=True, lat=12.9716, lon=77.5946):
     async with async_playwright() as p:
         browser, context, page = await launch_stealth_browser(
             p,
-            headless=headless
+            headless=headless,
+            lat=lat,
+            lon=lon
         )
 
         try:

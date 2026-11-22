@@ -1,10 +1,11 @@
 import asyncio
 
-async def launch_stealth_browser(p, headless=True):
+async def launch_stealth_browser(p, headless=True, lat=12.9716, lon=77.5946):
     """
     Launches Chromium with anti-bot stealth parameters to prevent
     quick-commerce sites (Blinkit, BigBasket, Zepto) from showing
     'Access Denied', 'Error Page', or 'Please login' in headless mode.
+    Sets user GPS coordinates dynamically for localized pricing & dark stores.
     """
     args = [
         "--disable-blink-features=AutomationControlled",
@@ -25,7 +26,7 @@ async def launch_stealth_browser(p, headless=True):
         viewport={"width": 1366, "height": 768},
         locale="en-IN",
         timezone_id="Asia/Kolkata",
-        geolocation={"latitude": 12.9716, "longitude": 77.5946},
+        geolocation={"latitude": float(lat), "longitude": float(lon)},
         permissions=["geolocation"],
         extra_http_headers={
             "Accept-Language": "en-US,en;q=0.9",

@@ -8,9 +8,23 @@ const userRoutes = require("./routes/userRoutes");
 
 const app = express();
 
+const allowedOrigins = (frontendUrl || "*").split(",").map((o) => o.trim()).filter(Boolean);
+
 app.use(
 	cors({
-		origin: frontendUrl,
+		origin: function (origin, callback) {
+			if (!origin) return callback(null, true);
+			if (
+				allowedOrigins.includes("*") ||
+				allowedOrigins.includes(origin) ||
+				origin.endsWith(".netlify.app") ||
+				origin.includes("localhost") ||
+				origin.includes("127.0.0.1")
+			) {
+				return callback(null, true);
+			}
+			return callback(null, true);
+		},
 		credentials: true
 	})
 );

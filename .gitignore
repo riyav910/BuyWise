@@ -37,6 +37,8 @@ Thumbs.db
 .idea/
 
 # ======================
-# Logs
+# Logs & Executables
 # ======================
 *.log
+*.exe
+cloudflared.exe

@@ -33,13 +33,18 @@ export function AuthProvider({ children }) {
     return response.data.user;
   }
 
-  async function signup(name, email, password) {
+  async function signup(name, email, password, pincode = "560001", city = "Bangalore") {
     const response = await api.post("/auth/register", {
       name,
       email,
-      password
+      password,
+      pincode,
+      city
     });
     setUser(response.data.user);
+    if (pincode) {
+      localStorage.setItem("buywise_pincode", pincode);
+    }
     return response.data.user;
   }
 

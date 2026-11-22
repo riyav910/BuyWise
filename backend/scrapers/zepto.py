@@ -34,27 +34,28 @@ except ImportError:
 BASE_URL = "https://www.zeptonow.com"
 
 
-async def scrape_zepto(product_name, headless=True):
+async def scrape_zepto(product_name, headless=True, lat=12.9716, lon=77.5946):
 
     async with async_playwright() as p:
 
         browser, context, page = await launch_stealth_browser(
-            p, headless=headless
+            p, headless=headless, lat=lat, lon=lon
         )
 
         try:
-            # Pre-inject location cookies for Zepto domains
+            # Pre-inject dynamic location cookies for Zepto domains
             try:
+                loc_val = f"{lat},{lon}"
                 await context.add_cookies([
                     {
                         "name": "user_location",
-                        "value": "12.9716,77.5946",
+                        "value": loc_val,
                         "domain": ".zeptonow.com",
                         "path": "/",
                     },
                     {
                         "name": "user_location",
-                        "value": "12.9716,77.5946",
+                        "value": loc_val,
                         "domain": ".zepto.com",
                         "path": "/",
                     },

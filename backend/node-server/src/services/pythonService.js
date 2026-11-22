@@ -2,13 +2,16 @@ const axios = require("axios");
 const FormData = require("form-data");
 const { pythonBackendUrl } = require("../config/env");
 
-async function compareProducts(items, requiredQuantity, requiredUnit) {
+async function compareProducts(items, requiredQuantity, requiredUnit, pincode, latitude, longitude) {
   const response = await axios.post(
     `${pythonBackendUrl}/compare`,
     {
       items,
       required_quantity: requiredQuantity,
-      required_unit: requiredUnit
+      required_unit: requiredUnit,
+      pincode: pincode || "560001",
+      latitude,
+      longitude
     },
     {
       timeout: 120000

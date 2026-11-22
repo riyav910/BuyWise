@@ -18,6 +18,16 @@ const userSchema = new mongoose.Schema(
     passwordHash: {
       type: String,
       required: true
+    },
+    pincode: {
+      type: String,
+      trim: true,
+      default: "560001"
+    },
+    city: {
+      type: String,
+      trim: true,
+      default: "Bangalore"
     }
   },
   {

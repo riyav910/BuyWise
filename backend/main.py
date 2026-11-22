@@ -9,6 +9,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from ocr_endpoint import router as ocr_router
 from scraper_service import r, fetch_product_data, fetch_product_data_with_meta
 from compare import compare_products, optimize_cart_inr
+from location_utils import resolve_coordinates
 
 app = FastAPI()
 
@@ -35,14 +36,15 @@ except Exception as e:
     print("Redis connection failed:", e)
 
 # CORS
-allowed_origins = [
-    origin.strip()
-    for origin in os.getenv(
-        "PYTHON_ALLOWED_ORIGINS",
-        "http://localhost:3000,http://127.0.0.1:3000,http://localhost:5000,http://127.0.0.1:5000"
-    ).split(",")
-    if origin.strip()
-]
+allowed_origins_env = os.getenv("PYTHON_ALLOWED_ORIGINS", "*")
+if allowed_origins_env.strip() == "*":
+    allowed_origins = ["*"]
+else:
+    allowed_origins = [
+        origin.strip()
+        for origin in allowed_origins_env.split(",")
+        if origin.strip()
+    ]
 
 app.add_middleware(
     CORSMiddleware,
@@ -54,13 +56,14 @@ app.add_middleware(
 
 from typing import Optional
 
-from typing import Optional
-
 # Request model
 class ItemRequest(BaseModel):
     items: list[str]
     required_quantity: Optional[float] = None
     required_unit: Optional[str] = None
+    pincode: Optional[str] = "560001"
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
 
 
 
@@ -138,7 +141,8 @@ async def compare_prices(request: ItemRequest):
         if not processed_items:
             return {"message": "No valid products provided"}
 
-        print(f"\n[PARALLEL EXECUTION] Processing {len(processed_items)} products in parallel: {processed_items}")
+        lat, lon, location_name = resolve_coordinates(request.pincode, request.latitude, request.longitude)
+        print(f"\n[PARALLEL EXECUTION] Processing {len(processed_items)} products for location: {location_name} (lat={lat}, lon={lon})")
 
         cache_info_map = {}
 
@@ -152,7 +156,7 @@ async def compare_prices(request: ItemRequest):
 
             # 2. Fetch product data (runs parallel scrapers, using cache if hit)
             try:
-                data, cache_meta = await fetch_product_data_with_meta(item_name, bypass_cache=False)
+                data, cache_meta = await fetch_product_data_with_meta(item_name, bypass_cache=False, lat=lat, lon=lon)
                 cache_info_map[item_name] = cache_meta
                 if data:
                     for d in data:
@@ -188,6 +192,12 @@ async def compare_prices(request: ItemRequest):
         # Calculate optimized cart values in INR across all parallel requested items
         optimized = optimize_cart_inr(results, processed_items)
         final["optimized"] = optimized
+        final["location"] = {
+            "pincode": request.pincode or "560001",
+            "name": location_name,
+            "latitude": lat,
+            "longitude": lon
+        }
 
         # Generate per-product comparison so frontend can display each product separately
         by_product = {}

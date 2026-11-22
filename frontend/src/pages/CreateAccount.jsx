@@ -5,6 +5,7 @@ import { useAuth } from "../auth/AuthContext";
 export default function CreateAccount() {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
+  const [pincode, setPincode] = useState("560001");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
@@ -22,10 +23,15 @@ export default function CreateAccount() {
       return;
     }
 
+    if (pincode && pincode.trim().length !== 6) {
+      setError("Please enter a valid 6-digit delivery PIN code (e.g. 560001)");
+      return;
+    }
+
     setLoading(true);
 
     try {
-      await signup(name, email, password);
+      await signup(name, email, password, pincode);
       navigate("/");
     } catch (err) {
       console.error("Signup error:", err);
@@ -392,6 +398,41 @@ export default function CreateAccount() {
                   }
                   onFocus={() =>
                     setFocusedField("email")
+                  }
+                  onBlur={() =>
+                    setFocusedField(null)
+                  }
+                  required
+                />
+
+              </div>
+
+              {/* PINCODE */}
+              <div style={styles.fieldWrap}>
+
+                <label
+                  style={styles.label(
+                    focusedField === "pincode" ||
+                    pincode
+                  )}
+                >
+                  Delivery Pincode (Indian PIN)
+                </label>
+
+                <input
+                  className="bw-auth-input"
+                  style={styles.input}
+                  type="text"
+                  placeholder="e.g. 560001 (Bangalore)"
+                  value={pincode}
+                  maxLength={6}
+                  onChange={(e) => {
+                    const val = e.target.value.replace(/\D/g, "");
+                    setPincode(val);
+                    if (error) setError("");
+                  }}
+                  onFocus={() =>
+                    setFocusedField("pincode")
                   }
                   onBlur={() =>
                     setFocusedField(null)

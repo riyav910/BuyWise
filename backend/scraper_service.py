@@ -126,7 +126,7 @@ def set_cache(product_name: str, data: list, ttl: int = None, tier: str = None):
 # FETCH LOGIC (DECOUPLED)
 # =========================
 
-async def fetch_product_data_with_meta(product_name: str, bypass_cache: bool = False, headless: bool = None):
+async def fetch_product_data_with_meta(product_name: str, bypass_cache: bool = False, headless: bool = None, lat: float = 12.9716, lon: float = 77.5946):
     """
     Fetches product data and returns (valid_results, cache_meta).
     """
@@ -144,7 +144,7 @@ async def fetch_product_data_with_meta(product_name: str, bypass_cache: bool = F
 
     try:
         # Call main scraper that coordinates all quick-commerce websites
-        valid_results = await scrape_all(product_name, headless=headless)
+        valid_results = await scrape_all(product_name, headless=headless, lat=lat, lon=lon)
 
         if not valid_results:
             return [], {
@@ -184,7 +184,7 @@ async def fetch_product_data_with_meta(product_name: str, bypass_cache: bool = F
     return valid_results, cache_meta
 
 
-async def fetch_product_data(product_name: str, bypass_cache: bool = False, headless: bool = None):
+async def fetch_product_data(product_name: str, bypass_cache: bool = False, headless: bool = None, lat: float = 12.9716, lon: float = 77.5946):
     """Backward-compatible wrapper returning only data list."""
-    data, _ = await fetch_product_data_with_meta(product_name, bypass_cache=bypass_cache, headless=headless)
+    data, _ = await fetch_product_data_with_meta(product_name, bypass_cache=bypass_cache, headless=headless, lat=lat, lon=lon)
     return data

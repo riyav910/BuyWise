@@ -149,6 +149,7 @@ function MainApp() {
     setInput(query);
     setError("");
     setLoading(true);
+    setResult(null);
 
     try {
       const items = query
@@ -156,12 +157,13 @@ function MainApp() {
         .map((item) => item.trim())
         .filter(Boolean);
 
+      const pincode = localStorage.getItem("buywise_pincode") || "560001";
       let resData = null;
       try {
-        const res = await api.post("/products/compare", { items });
+        const res = await api.post("/products/compare", { items, pincode });
         resData = res.data?.data || res.data;
       } catch (nodeErr) {
-        const res = await axios.post("http://127.0.0.1:8000/compare", { items });
+        const res = await axios.post("http://127.0.0.1:8000/compare", { items, pincode });
         resData = res.data?.data || res.data;
       }
 

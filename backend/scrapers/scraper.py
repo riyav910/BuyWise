@@ -30,10 +30,10 @@ if sys.platform == "win32":
     asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
 
 
-async def scrape_all_platforms(product_name: str, headless: bool = None) -> list[dict]:
+async def scrape_all_platforms(product_name: str, headless: bool = None, lat: float = 12.9716, lon: float = 77.5946) -> list[dict]:
     """
     Main scraper coordinator.
-    Scrapes all platforms in parallel with the given headless configuration.
+    Scrapes all platforms in parallel with the given headless configuration and GPS coordinates.
     Defaults to HEADLESS_MODE (single point of control).
     Returns a list of valid scraped product results.
     """
@@ -43,10 +43,10 @@ async def scrape_all_platforms(product_name: str, headless: bool = None) -> list
     product_name = product_name.lower().strip()
 
     scraper_tasks = [
-        ("BigBasket", scrape_bigbasket(product_name, headless=headless)),
-        ("Blinkit", scrape_blinkit(product_name, headless=headless)),
-        ("Zepto", scrape_zepto(product_name, headless=headless)),
-        # ("JioMart", scrape_jiomart(product_name, headless=headless)),
+        ("BigBasket", scrape_bigbasket(product_name, headless=headless, lat=lat, lon=lon)),
+        ("Blinkit", scrape_blinkit(product_name, headless=headless, lat=lat, lon=lon)),
+        ("Zepto", scrape_zepto(product_name, headless=headless, lat=lat, lon=lon)),
+        # ("JioMart", scrape_jiomart(product_name, headless=headless, lat=lat, lon=lon)),
     ]
 
     names = [name for name, _ in scraper_tasks]
