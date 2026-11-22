@@ -56,11 +56,13 @@ async function register(req, res, next) {
       city: city?.trim() || "Bangalore"
     });
 
-    setAuthCookie(res, createToken(user._id.toString()));
+    const token = createToken(user._id.toString());
+    setAuthCookie(res, token);
 
     return res.status(201).json({
       success: true,
-      user: publicUser(user)
+      user: publicUser(user),
+      token
     });
   } catch (error) {
     return next(error);
@@ -80,11 +82,13 @@ async function login(req, res, next) {
       });
     }
 
-    setAuthCookie(res, createToken(user._id.toString()));
+    const token = createToken(user._id.toString());
+    setAuthCookie(res, token);
 
     return res.json({
       success: true,
-      user: publicUser(user)
+      user: publicUser(user),
+      token
     });
   } catch (error) {
     return next(error);

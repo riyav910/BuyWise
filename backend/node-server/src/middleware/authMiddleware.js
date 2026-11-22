@@ -4,7 +4,9 @@ const { jwtSecret } = require("../config/env");
 
 async function authMiddleware(req, res, next) {
   try {
-    const token = req.cookies?.buywise_token;
+    const authHeader = req.headers.authorization;
+    const bearerToken = authHeader && authHeader.startsWith("Bearer ") ? authHeader.slice(7).trim() : null;
+    const token = req.cookies?.buywise_token || bearerToken;
 
     if (!token) {
       return res.status(401).json({

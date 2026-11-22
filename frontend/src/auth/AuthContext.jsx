@@ -29,6 +29,9 @@ export function AuthProvider({ children }) {
 
   async function login(email, password) {
     const response = await api.post("/auth/login", { email, password });
+    if (response.data.token) {
+      localStorage.setItem("buywise_token", response.data.token);
+    }
     setUser(response.data.user);
     return response.data.user;
   }
@@ -41,6 +44,9 @@ export function AuthProvider({ children }) {
       pincode,
       city
     });
+    if (response.data.token) {
+      localStorage.setItem("buywise_token", response.data.token);
+    }
     setUser(response.data.user);
     if (pincode) {
       localStorage.setItem("buywise_pincode", pincode);
@@ -49,8 +55,12 @@ export function AuthProvider({ children }) {
   }
 
   async function logout() {
-    await api.post("/auth/logout");
-    setUser(null);
+    try {
+      await api.post("/auth/logout");
+    } finally {
+      localStorage.removeItem("buywise_token");
+      setUser(null);
+    }
   }
 
   return (

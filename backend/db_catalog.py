@@ -6,6 +6,13 @@ directly from MongoDB with automatic in-memory fallback.
 import os
 import sys
 import datetime
+from pathlib import Path
+try:
+    from dotenv import load_dotenv
+    load_dotenv(Path(__file__).parent / ".env")
+except ImportError:
+    pass
+
 from typing import List, Dict, Any, Optional, Tuple
 
 try:

@@ -1,5 +1,15 @@
 const mongoose = require("mongoose");
+const dns = require("dns");
 const path = require("path");
+
+if (dns && typeof dns.setServers === "function") {
+  try {
+    dns.setServers(["8.8.8.8", "1.1.1.1"]);
+  } catch (e) {
+    // Ignore if not supported
+  }
+}
+
 require("dotenv").config({ path: path.join(__dirname, "../../.env") });
 
 const ProductCatalog = require("../models/ProductCatalog");

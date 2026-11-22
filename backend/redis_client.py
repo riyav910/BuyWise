@@ -1,4 +1,11 @@
 import os
+from pathlib import Path
+try:
+    from dotenv import load_dotenv
+    load_dotenv(Path(__file__).parent / ".env")
+except ImportError:
+    pass
+
 import redis
 
 REDIS_URL = os.getenv("REDIS_URL")
