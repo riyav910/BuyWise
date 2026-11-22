@@ -44,22 +44,17 @@ app.use("/api/products", productRoutes);
 app.use("/api/user", userRoutes);
 
 app.use((error, req, res, next) => {
-	console.error(error);
+	console.error("Server Error:", error.message || error);
 	const status = error.status === 400 || error.response?.status === 400
 		? 400
 		: error.status === 404 || error.response?.status === 404
 			? 404
-			: 500;
-	const message = status === 400
-		? "Invalid request"
-		: status === 404
-			? "Requested resource was not found"
-			: "Internal server error";
+			: error.status || 500;
 
 	res.status(status).json({
 		success: false,
-		message,
-		...(nodeEnv !== "production" && error.code ? { code: error.code } : {})
+		message: error.message || "Internal server error",
+		...(error.details ? { details: error.details } : {})
 	});
 });
 

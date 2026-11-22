@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import axios from "axios";
+import api from "../api";
 import {
   Search,
   ArrowRight,
@@ -11,8 +11,6 @@ import {
   Shield,
   BarChart3,
 } from "lucide-react";
-
-const API = "http://127.0.0.1:8000";
 
 const PLATFORMS = [
   { name: "Blinkit", color: "#F6C828" },
@@ -61,8 +59,8 @@ export default function LandingPage() {
   const navigate = useNavigate();
 
   useEffect(() => {
-    axios
-      .get(`${API}/stats`)
+    api
+      .get("/stats")
       .then((res) => setStats(res.data))
       .catch(() => {});
   }, []);

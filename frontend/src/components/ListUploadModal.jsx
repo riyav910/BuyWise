@@ -123,22 +123,9 @@ export default function ListUploadModal({
 
     try {
       setScanStatus("Connecting to OCR engine...");
-      let res;
-      try {
-        res = await api.post("/products/parse-image", formData, {
-          headers: { "Content-Type": "multipart/form-data" },
-        });
-      } catch (proxyErr) {
-        try {
-          res = await axios.post("http://localhost:8000/parse-image", formData, {
-            headers: { "Content-Type": "multipart/form-data" },
-          });
-        } catch (localErr) {
-          res = await axios.post("http://127.0.0.1:8000/parse-image", formData, {
-            headers: { "Content-Type": "multipart/form-data" },
-          });
-        }
-      }
+      const res = await api.post("/products/parse-image", formData, {
+        headers: { "Content-Type": "multipart/form-data" },
+      });
 
       const data = res.data;
       const items = data?.items || [];
@@ -154,7 +141,8 @@ export default function ListUploadModal({
       }
     } catch (err) {
       console.error("OCR Request Error:", err);
-      setError("Could not process the image. Please verify that the backend server is running on port 8000.");
+      const msg = err.response?.data?.message || err.message || "Could not process the image. Please verify that the backend is running.";
+      setError(msg);
     } finally {
       setScanning(false);
     }

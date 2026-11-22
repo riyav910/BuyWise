@@ -1,6 +1,5 @@
 import { useState, useMemo } from "react";
 import { BrowserRouter, Routes, Route, useNavigate } from "react-router-dom";
-import axios from "axios";
 import api from "./api";
 import "./App.css";
 
@@ -110,16 +109,9 @@ function MainApp() {
 
     try {
       let extracted = [];
-      let res;
-      try {
-        res = await axios.post("http://localhost:8000/parse-image", formData, {
-          headers: { "Content-Type": "multipart/form-data" },
-        });
-      } catch (localErr) {
-        res = await axios.post("http://127.0.0.1:8000/parse-image", formData, {
-          headers: { "Content-Type": "multipart/form-data" },
-        });
-      }
+      const res = await api.post("/products/parse-image", formData, {
+        headers: { "Content-Type": "multipart/form-data" },
+      });
       extracted = res.data?.items || [];
 
       if (extracted.length === 0) {
@@ -131,14 +123,15 @@ function MainApp() {
       }
     } catch (err) {
       console.error("OCR error:", err);
-      setError("Unable to process image. Please check that the backend is running.");
+      const msg = err.response?.data?.message || err.message || "Unable to process image. Please check that the backend is running.";
+      setError(msg);
     } finally {
       setLoading(false);
       setOcrLoading(false);
     }
   };
 
-  // Compare handler (with node-server proxy and direct fallback)
+  // Compare handler (routed via Node.js API Gateway)
   const handleCompare = async (queryOverride) => {
     const query = (queryOverride ?? input).trim();
     if (!query) {
@@ -158,14 +151,8 @@ function MainApp() {
         .filter(Boolean);
 
       const pincode = localStorage.getItem("buywise_pincode") || "560001";
-      let resData = null;
-      try {
-        const res = await api.post("/products/compare", { items, pincode });
-        resData = res.data?.data || res.data;
-      } catch (nodeErr) {
-        const res = await axios.post("http://127.0.0.1:8000/compare", { items, pincode });
-        resData = res.data?.data || res.data;
-      }
+      const res = await api.post("/products/compare", { items, pincode });
+      const resData = res.data?.data || res.data;
 
       if (resData?.error || resData?.message) {
         setError(resData.error || resData.message || "No results found.");
@@ -175,7 +162,8 @@ function MainApp() {
       }
     } catch (err) {
       console.error("Compare error:", err);
-      setError("Unable to fetch comparison. Please verify that the backend is running.");
+      const msg = err.response?.data?.message || err.message || "Unable to fetch comparison. Please verify that the backend is running.";
+      setError(msg);
       setResult(null);
     } finally {
       setLoading(false);
