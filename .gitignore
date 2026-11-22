@@ -15,6 +15,7 @@ scratch/
 # Frontend (Node)
 # ======================
 frontend/node_modules/
+.netlify/
 
 # ======================
 # Env files
