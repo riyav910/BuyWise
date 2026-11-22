@@ -33,17 +33,19 @@ Write-Host "  Copy your public HTTPS URL below." -ForegroundColor White
 Write-Host "  Set it as PYTHON_BACKEND_URL in your Render Environment Variables!" -ForegroundColor Yellow
 Write-Host "==========================================================================`n" -ForegroundColor Green
 
-# Note: Many Indian ISPs block *.trycloudflare.com.
-# We first try Pinggy via built-in Windows OpenSSH (zero install, unblocked across all ISPs).
-# If the user has ngrok, they can also use ngrok.
+# Ensure a local SSH key exists so SSH never prompts for a password
+$keyFile = Join-Path $scriptDir "id_ed25519"
+if (-not (Test-Path $keyFile)) {
+    ssh-keygen -t ed25519 -N '""' -f $keyFile -q
+}
 
 $hasSsh = Get-Command ssh -ErrorAction SilentlyContinue
 $hasNgrok = Get-Command ngrok -ErrorAction SilentlyContinue
 
 if ($hasSsh) {
-    Write-Host "Connecting via Pinggy Tunnel (built-in Windows SSH, unblocked)..." -ForegroundColor Cyan
+    Write-Host "Connecting via Pinggy Tunnel (built-in Windows SSH, unblocked in India)..." -ForegroundColor Cyan
     Write-Host "Look for the https://xxxx.a.pinggy.link URL below:`n" -ForegroundColor Yellow
-    ssh -o StrictHostKeyChecking=no -p 443 -R0:localhost:8000 a.pinggy.io
+    ssh -i $keyFile -o StrictHostKeyChecking=no -p 443 -R0:localhost:8000 a.pinggy.io
 } elseif ($hasNgrok) {
     Write-Host "Connecting via ngrok..." -ForegroundColor Cyan
     ngrok http 8000
