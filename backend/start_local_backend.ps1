@@ -68,20 +68,45 @@ if (-not (Test-Path $keyFile)) {
     ssh-keygen -t ed25519 -N '""' -f $keyFile -q
 }
 
-$hasNgrok = Get-Command ngrok -ErrorAction SilentlyContinue
+$hasSsh = Get-Command ssh -ErrorAction SilentlyContinue
+
+$ngrokExe = Join-Path $scriptDir "ngrok.exe"
+if (-not (Test-Path $ngrokExe)) {
+    $ngrokCmd = Get-Command ngrok -ErrorAction SilentlyContinue
+    if ($ngrokCmd) { $ngrokExe = "ngrok" } else { $ngrokExe = $null }
+}
+
+# Read NGROK_AUTHTOKEN and NGROK_DOMAIN from .env if present
+$envFile = Join-Path $scriptDir ".env"
+if (Test-Path $envFile) {
+    Get-Content $envFile | ForEach-Object {
+        if ($_ -match '^\s*NGROK_AUTHTOKEN\s*=\s*(.+)$') {
+            $env:NGROK_AUTHTOKEN = $matches[1].Trim()
+        }
+        if ($_ -match '^\s*NGROK_DOMAIN\s*=\s*(.+)$') {
+            $env:NGROK_DOMAIN = $matches[1].Trim()
+        }
+    }
+}
+
+if ($env:NGROK_AUTHTOKEN -and $ngrokExe) {
+    & $ngrokExe config add-authtoken $env:NGROK_AUTHTOKEN | Out-Null
+}
+
 $ngrokDomain = $env:NGROK_DOMAIN
 
-if ($hasNgrok -and $ngrokDomain) {
+if ($ngrokExe -and $ngrokDomain) {
     Write-Host "Connecting via ngrok with permanent static domain: https://$ngrokDomain..." -ForegroundColor Cyan
-    ngrok http --domain=$ngrokDomain 8000
-} elseif ($hasNgrok) {
+    & $ngrokExe http --domain=$ngrokDomain 8000
+} elseif ($ngrokExe -and $env:NGROK_AUTHTOKEN) {
     Write-Host "Connecting via ngrok..." -ForegroundColor Cyan
-    ngrok http 8000
+    & $ngrokExe http 8000
 } elseif ($hasSsh) {
     Write-Host "Connecting via Pinggy Tunnel (built-in Windows SSH, unblocked in India)..." -ForegroundColor Cyan
     Write-Host "Look for the https://xxxx.a.pinggy.link URL below:`n" -ForegroundColor Yellow
     ssh -i $keyFile -o StrictHostKeyChecking=no -p 443 -R0:localhost:8000 a.pinggy.io
 } else {
+    Write-Host "Connecting via Cloudflare..." -ForegroundColor Cyan
     $cloudflaredExe = Join-Path $scriptDir "cloudflared.exe"
     if (Test-Path $cloudflaredExe) {
         & $cloudflaredExe tunnel --url http://127.0.0.1:8000
