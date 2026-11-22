@@ -1,23 +1,24 @@
+[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+
 Write-Host "==================================================" -ForegroundColor Cyan
-Write-Host "  BuyWise Cloudflare Secure Tunnel for Scraper" -ForegroundColor Green
-Write-Host "  Connects your local PC's Playwright to the Cloud" -ForegroundColor Yellow
+Write-Host "         BuyWise Secure Scraper Tunnel            " -ForegroundColor Green
 Write-Host "==================================================" -ForegroundColor Cyan
 
-$cloudflaredCmd = Get-Command cloudflared -ErrorAction SilentlyContinue
+$hasSsh = Get-Command ssh -ErrorAction SilentlyContinue
+$hasNgrok = Get-Command ngrok -ErrorAction SilentlyContinue
 
-if (-not $cloudflaredCmd) {
-    $localExe = Join-Path $PSScriptRoot "cloudflared.exe"
-    if (-not (Test-Path $localExe)) {
-        Write-Host "`n[1/2] Downloading official cloudflared binary (one-time setup)..." -ForegroundColor Yellow
-        $url = "https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-windows-amd64.exe"
-        Invoke-WebRequest -Uri $url -OutFile $localExe -UseBasicParsing
-        Write-Host "[2/2] Downloaded successfully to $localExe" -ForegroundColor Green
-    }
-    Write-Host "`nLaunching tunnel for http://127.0.0.1:8000..." -ForegroundColor Cyan
-    Write-Host "Look for the URL ending with '.trycloudflare.com' below:`n" -ForegroundColor Yellow
-    & $localExe tunnel --url http://127.0.0.1:8000
+if ($hasSsh) {
+    Write-Host "`nLaunching Pinggy Tunnel (built-in SSH, unblocked in India)..." -ForegroundColor Cyan
+    Write-Host "Look for the https://xxxx.a.pinggy.link URL below:`n" -ForegroundColor Yellow
+    ssh -o StrictHostKeyChecking=no -p 443 -R0:localhost:8000 a.pinggy.io
+} elseif ($hasNgrok) {
+    Write-Host "`nLaunching ngrok tunnel..." -ForegroundColor Cyan
+    ngrok http 8000
 } else {
-    Write-Host "`nLaunching tunnel for http://127.0.0.1:8000..." -ForegroundColor Cyan
-    Write-Host "Look for the URL ending with '.trycloudflare.com' below:`n" -ForegroundColor Yellow
-    cloudflared tunnel --url http://127.0.0.1:8000
+    $cloudflaredExe = Join-Path $PSScriptRoot "cloudflared.exe"
+    if (Test-Path $cloudflaredExe) {
+        & $cloudflaredExe tunnel --url http://127.0.0.1:8000
+    } else {
+        cloudflared tunnel --url http://127.0.0.1:8000
+    }
 }
