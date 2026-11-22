@@ -22,12 +22,24 @@ print('  [OK] Upstash Redis connected!')
 print('  [OK] MongoDB Atlas connected!')
 "
 
+# Free port 8000 if occupied by any stale process
+$staleConns = Get-NetTCPConnection -LocalPort 8000 -ErrorAction SilentlyContinue
+if ($staleConns) {
+    foreach ($conn in $staleConns) {
+        if ($conn.OwningProcess -gt 0) {
+            Write-Host "  Freeing port 8000 (stopping stale process $($conn.OwningProcess))..." -ForegroundColor Yellow
+            Stop-Process -Id $conn.OwningProcess -Force -ErrorAction SilentlyContinue
+        }
+    }
+    Start-Sleep -Seconds 1
+}
+
 Write-Host "`n[2/3] Starting Python FastAPI Backend on port 8000..." -ForegroundColor Yellow
 $fastApiProcess = Start-Process -FilePath $pythonExe -ArgumentList "-m", "uvicorn", "main:app", "--host", "127.0.0.1", "--port", "8000" -WorkingDirectory $scriptDir -PassThru
 
 # Wait for FastAPI to become ready
 $started = $false
-for ($i = 0; $i -lt 8; $i++) {
+for ($i = 0; $i -lt 15; $i++) {
     Start-Sleep -Seconds 1
     try {
         $resp = Invoke-RestMethod -Uri "http://127.0.0.1:8000/health" -TimeoutSec 2 -ErrorAction SilentlyContinue
@@ -39,9 +51,9 @@ for ($i = 0; $i -lt 8; $i++) {
 }
 
 if ($started) {
-    Write-Host "  [OK] FastAPI is running and healthy on port 8000!" -ForegroundColor Green
+    Write-Host "  [OK] FastAPI is healthy and listening on http://127.0.0.1:8000!" -ForegroundColor Green
 } else {
-    Write-Host "  [OK] FastAPI startup initiated." -ForegroundColor Green
+    Write-Host "  [!] Warning: FastAPI health check did not respond yet, proceeding..." -ForegroundColor Yellow
 }
 
 Write-Host "`n[3/3] Launching Secure Tunnel for http://127.0.0.1:8000..." -ForegroundColor Cyan
