@@ -22,6 +22,14 @@ app = FastAPI()
 
 app.include_router(ocr_router)
 
+@app.get("/")
+def read_root():
+    return {"status": "ok", "service": "BuyWise Scraper & Optimization Engine"}
+
+@app.get("/health")
+def read_health():
+    return {"status": "healthy"}
+
 if sys.platform == "win32":
     try:
         sys.stdout.reconfigure(encoding="utf-8", errors="replace")

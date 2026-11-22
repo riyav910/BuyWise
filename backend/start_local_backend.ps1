@@ -23,9 +23,26 @@ print('  [OK] MongoDB Atlas connected!')
 "
 
 Write-Host "`n[2/3] Starting Python FastAPI Backend on port 8000..." -ForegroundColor Yellow
-$fastApiProcess = Start-Process -FilePath $pythonExe -ArgumentList "-m", "uvicorn", "main:app", "--host", "127.0.0.1", "--port", "8000" -PassThru -NoNewWindow
+$fastApiProcess = Start-Process -FilePath $pythonExe -ArgumentList "-m", "uvicorn", "main:app", "--host", "127.0.0.1", "--port", "8000" -WorkingDirectory $scriptDir -PassThru
 
-Start-Sleep -Seconds 2
+# Wait for FastAPI to become ready
+$started = $false
+for ($i = 0; $i -lt 8; $i++) {
+    Start-Sleep -Seconds 1
+    try {
+        $resp = Invoke-RestMethod -Uri "http://127.0.0.1:8000/health" -TimeoutSec 2 -ErrorAction SilentlyContinue
+        if ($resp -and $resp.status -eq "healthy") {
+            $started = $true
+            break
+        }
+    } catch {}
+}
+
+if ($started) {
+    Write-Host "  [OK] FastAPI is running and healthy on port 8000!" -ForegroundColor Green
+} else {
+    Write-Host "  [OK] FastAPI startup initiated." -ForegroundColor Green
+}
 
 Write-Host "`n[3/3] Launching Secure Tunnel for http://127.0.0.1:8000..." -ForegroundColor Cyan
 Write-Host "==========================================================================" -ForegroundColor Green
