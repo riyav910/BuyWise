@@ -56,16 +56,19 @@ if (-not (Test-Path $keyFile)) {
     ssh-keygen -t ed25519 -N '""' -f $keyFile -q
 }
 
-$hasSsh = Get-Command ssh -ErrorAction SilentlyContinue
 $hasNgrok = Get-Command ngrok -ErrorAction SilentlyContinue
+$ngrokDomain = $env:NGROK_DOMAIN
 
-if ($hasSsh) {
-    Write-Host "Connecting via Pinggy Tunnel (built-in Windows SSH, unblocked in India)..." -ForegroundColor Cyan
-    Write-Host "Look for the https://xxxx.a.pinggy.link URL below:`n" -ForegroundColor Yellow
-    ssh -i $keyFile -o StrictHostKeyChecking=no -p 443 -R0:localhost:8000 a.pinggy.io
+if ($hasNgrok -and $ngrokDomain) {
+    Write-Host "Connecting via ngrok with permanent static domain: https://$ngrokDomain..." -ForegroundColor Cyan
+    ngrok http --domain=$ngrokDomain 8000
 } elseif ($hasNgrok) {
     Write-Host "Connecting via ngrok..." -ForegroundColor Cyan
     ngrok http 8000
+} elseif ($hasSsh) {
+    Write-Host "Connecting via Pinggy Tunnel (built-in Windows SSH, unblocked in India)..." -ForegroundColor Cyan
+    Write-Host "Look for the https://xxxx.a.pinggy.link URL below:`n" -ForegroundColor Yellow
+    ssh -i $keyFile -o StrictHostKeyChecking=no -p 443 -R0:localhost:8000 a.pinggy.io
 } else {
     $cloudflaredExe = Join-Path $scriptDir "cloudflared.exe"
     if (Test-Path $cloudflaredExe) {
