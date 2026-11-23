@@ -45,3 +45,19 @@ Thumbs.db
 cloudflared.exe
 backend/id_*
 id_*
+
+# ======================
+# Temporary Debug & Test Scripts
+# ======================
+backend/debug_*
+backend/inspect_*
+backend/trace_*
+backend/diag_*
+backend/parse_*
+backend/test_bb_*
+backend/test_zepto_*
+backend/test_all_*
+backend/test_api_*
+backend/*.html
+backend/*.png
+

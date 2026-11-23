@@ -113,18 +113,36 @@ async def scrape_zepto(product_name, headless=True, lat=12.9716, lon=77.5946):
                         priceText.match(/₹\\s*[\\d,.]+/g) || []
                     ).map(p =>
                         parseFloat(p.replace(/[^\\d.]/g, ''))
-                    ).filter(p => !isNaN(p));
+                    ).filter(p => !isNaN(p) && p > 0);
 
+                    // Name resolution: check slot, then image alt/title, then headings
                     let name = getText('[data-slot-id="ProductName"]');
                     if (!name) {
-                        const h = card.querySelector('h3, h4, h5, [data-testid="product-name"]');
+                        const img = card.querySelector('img[title], img[alt]');
+                        if (img) {
+                            name = (img.getAttribute('title') || img.getAttribute('alt') || '').trim();
+                        }
+                    }
+                    if (!name) {
+                        const h = card.querySelector('h3, h4, h5, [data-testid="product-name"], [class*="product-name"]');
                         if (h) name = h.innerText.trim();
                     }
+                    if (!name && card.innerText) {
+                        // Zepto text format: line 0 ADD, line 1 ₹27, line 2 Product Name, line 3 Pack
+                        const lines = card.innerText.split('\\n').map(l => l.trim()).filter(Boolean);
+                        const candidate = lines.find(l => !l.startsWith('₹') && l !== 'ADD' && !/\\d+\\s*(?:pack|ml|g|kg)/i.test(l));
+                        if (candidate) name = candidate;
+                    }
 
+                    // Pack / quantity resolution
                     let quantity = getText('[data-slot-id="PackSize"]');
                     if (!quantity) {
                         const q = card.querySelector('[data-testid="product-quantity"], [data-slot-id="pack-size"]');
                         if (q) quantity = q.innerText.trim();
+                    }
+                    if (!quantity && card.innerText) {
+                        const qMatch = card.innerText.match(/\\d+(?:\\.\\d+)?\\s*(?:ml|l|ltr|litre|g|gm|gram|kg|kilo|pcs?|pieces?|units?|packs?)/i);
+                        if (qMatch) quantity = qMatch[0];
                     }
 
                     const image = card.querySelector(
@@ -145,13 +163,13 @@ async def scrape_zepto(product_name, headless=True, lat=12.9716, lon=77.5946):
 
                     const eta = getText(
                         '[data-slot-id="EtaInformation"]'
-                    );
+                    ) || '10 mins';
 
                     return {
                         name,
                         prices,
                         quantity,
-                        image: image ? image.src : null,
+                        image: image ? (image.src || image.getAttribute('src')) : null,
                         productUrl,
                         outOfStock,
                         eta
@@ -187,6 +205,14 @@ async def scrape_zepto(product_name, headless=True, lat=12.9716, lon=77.5946):
                     )
                     if not matches:
                         continue
+
+                    # Fallback for quantity if not cleanly parsed
+                    if not parse_and_normalize_quantity(qty_text):
+                        name_qty = re.search(r'(\d+(?:\.\d+)?\s*(?:ml|l|ltr|g|gm|kg|pcs?|pieces?|units?|packs?))', name, re.I)
+                        if name_qty:
+                            qty_text = name_qty.group(1)
+                        else:
+                            qty_text = "1 piece"
 
                     product_url = (
                         urljoin(BASE_URL, item["productUrl"])

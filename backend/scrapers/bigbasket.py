@@ -55,10 +55,10 @@ async def scrape_bigbasket(product_name, headless=True, lat=12.9716, lon=77.5946
                 timeout=45000
             )
 
-            # Wait for product cards
+            # Wait for product cards or prices
             try:
                 await page.wait_for_selector(
-                    'a[href*="/pd/"] img[alt]',
+                    'a[href*="/pd/"], [class*="SKUDeck"], text=₹',
                     timeout=20000
                 )
             except Exception:
@@ -76,111 +76,79 @@ async def scrape_bigbasket(product_name, headless=True, lat=12.9716, lon=77.5946
             # Extract complete product cards
             cards_data = await page.evaluate("""
                 () => {
-
-                    const cards = Array.from(
-                        document.querySelectorAll('ul.grid li')
+                    // Match cards by SKUDeck, li container, or links
+                    const decks = Array.from(
+                        document.querySelectorAll('div[class*="SKUDeck"], li[class*="sc-ciQpPG"], ul[class*="grid"] li')
                     );
+                    const cards = decks.length > 0 ? decks : Array.from(document.querySelectorAll('ul.grid li'));
 
                     return cards.map(card => {
-
                         const productLink = card.querySelector(
                             'a[href*="/pd/"]'
-                        );
+                        ) || (card.matches && card.matches('a[href*="/pd/"]') ? card : null);
 
                         if (!productLink) return null;
 
                         // Product image
-                        const image = productLink.querySelector('img');
-
-                        // Product title link
-                        const titleLink = card.querySelector(
-                            'h3 a[href*="/pd/"]'
-                        );
+                        const image = card.querySelector('img[title], img[alt], img');
 
                         // Brand
-                        const brandEl = titleLink
-                            ? titleLink.querySelector(
-                                '[class*="BrandName"]'
-                            )
-                            : null;
-
-                        const brand = brandEl
-                            ? brandEl.innerText.trim()
-                            : '';
+                        const brandEl = card.querySelector(
+                            '[class*="BrandName"], span[class*="BrandName"]'
+                        );
+                        const brand = brandEl ? brandEl.innerText.trim() : '';
 
                         // Product name
-                        const nameEl = titleLink
-                            ? titleLink.querySelector('h3')
-                            : null;
+                        const h3El = card.querySelector('h3, [class*="BrandName"] + div h3, div > h3');
+                        let name = h3El ? h3El.innerText.trim() : '';
+                        if (!name && image) {
+                            name = (image.getAttribute('title') || image.getAttribute('alt') || '').trim();
+                        }
 
-                        const name = nameEl
-                            ? nameEl.innerText.trim()
-                            : (image ? image.alt : '');
-
-                        // Pack size
+                        // Pack size from button or dropdown
                         const buttons = Array.from(
-                            card.querySelectorAll('button')
+                            card.querySelectorAll('button, [id*="headlessui-listbox-button"], span[class*="PackSize"]')
                         );
-
-                        const quantityButton = buttons.find(btn =>
-                            /\\d+(?:\\.\\d+)?\\s*(?:kg|g|gm|gms|ml|l|litre|liter|pack|piece|pcs|unit)/i
-                            .test(btn.innerText || '')
-                        );
-
-                        const quantity = quantityButton
-                            ? quantityButton.innerText.trim()
-                            : '';
+                        let quantity = '';
+                        for (const btn of buttons) {
+                            const bText = btn.innerText || '';
+                            const m = bText.match(/\\d+(?:\\.\\d+)?\\s*(?:kg|g|gm|gms|ml|l|litre|liter|pack|piece|pcs|unit)/i);
+                            if (m) {
+                                quantity = m[0];
+                                break;
+                            }
+                        }
 
                         // Selling price and MRP
-                        const priceSpans = Array.from(
-                            card.querySelectorAll('span')
-                        ).filter(el =>
-                            /^₹\\s*[\\d,]+(?:\\.\\d{1,2})?$/
-                            .test(el.innerText.trim())
-                        );
-
-                        const prices = priceSpans.map(el =>
-                            parseFloat(
-                                el.innerText.replace(/[^\\d.]/g, '')
-                            )
+                        const cardText = card.innerText || '';
+                        const priceMatches = cardText.match(/₹\\s*[\\d,.]+/g) || [];
+                        const prices = priceMatches.map(p =>
+                            parseFloat(p.replace(/[^\\d.]/g, ''))
                         ).filter(n => !isNaN(n) && n > 0);
 
                         // ETA
-                        const textLines = (card.innerText || '')
+                        const textLines = cardText
                             .split('\\n')
                             .map(t => t.trim())
                             .filter(Boolean);
 
                         const etaText = textLines.find(t =>
                             /^\\d+\\s*mins?$/i.test(t)
-                        ) || '';
+                        ) || '15 mins';
 
                         // Product URL
-                        const productUrl =
-                            productLink.getAttribute('href');
+                        const productUrl = productLink.getAttribute('href');
 
                         return {
-
                             brand,
-
-                            name: name,
-
-                            fullName: [brand, name]
-                                .filter(Boolean)
-                                .join(' '),
-
+                            name,
+                            fullName: [brand, name].filter(Boolean).join(' '),
                             quantity,
-
                             prices,
-
-                            image: image ? image.src : null,
-
+                            image: image ? (image.src || image.getAttribute('src')) : null,
                             productUrl,
-
                             eta: etaText
-
                         };
-
                     }).filter(Boolean);
                 }
             """)

@@ -171,7 +171,9 @@ async def fetch_product_data_with_meta(product_name: str, bypass_cache: bool = F
             item["search_term"] = product_name
 
     # 2. Cache store with respective TTL and tier
-    set_cache(product_name, valid_results, ttl=ttl, tier=tier)
+    # Only store full TTL if at least 2 platforms succeeded, to avoid cache poisoning
+    cache_ttl = ttl if len(valid_results) >= 2 else min(30, ttl)
+    set_cache(product_name, valid_results, ttl=cache_ttl, tier=tier)
 
     cache_meta = {
         "is_cached": False,
