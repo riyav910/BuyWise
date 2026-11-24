@@ -73,28 +73,29 @@ async def scrape_zepto(product_name, headless=True, lat=12.9716, lon=77.5946):
                 timeout=45000
             )
 
-            # Wait for product cards or price containers
+            # Wait for actual prices to render (skeleton cards don't have ₹ signs)
             try:
-                await page.wait_for_selector(
-                    'a[data-testid="product-card"], [data-testid="product-card"], [data-slot-id="EdlpPrice"], text=₹',
-                    timeout=20000
-                )
+                await page.wait_for_selector('text=₹', timeout=25000)
             except Exception:
                 pass
 
-            await page.wait_for_timeout(1500)
+            await page.wait_for_timeout(1000)
 
-            # Scroll to load additional lazy-loaded products
-            for _ in range(2):
-                await page.evaluate(
-                    "window.scrollBy(0, window.innerHeight)"
-                )
-                await page.wait_for_timeout(600)
+            # Scroll to load additional lazy-loaded products safely
+            try:
+                for _ in range(2):
+                    await page.evaluate("window.scrollBy(0, window.innerHeight)")
+                    await page.wait_for_timeout(500)
+            except Exception:
+                pass
 
-            # Extract product information from DOM
-            cards_data = await page.locator(
-                'a[data-testid="product-card"], div[data-testid="product-card"], a[href*="/pn/"], a[href*="/prn/"]'
-            ).evaluate_all("""
+            # Extract product information from DOM (with retry if client-side navigation destroys execution context)
+            cards_data = []
+            for attempt in range(2):
+                try:
+                    cards_data = await page.locator(
+                        'a[data-testid="product-card"], div[data-testid="product-card"], a[href*="/pn/"], a[href*="/prn/"]'
+                    ).evaluate_all("""
                 cards => cards.map(card => {
                     const getText = (selector) => {
                         const el = card.querySelector(selector);
@@ -176,6 +177,13 @@ async def scrape_zepto(product_name, headless=True, lat=12.9716, lon=77.5946):
                     };
                 })
             """)
+                    if cards_data and any(c.get("prices") for c in cards_data):
+                        break
+                except Exception as eval_err:
+                    if "context was destroyed" in str(eval_err).lower() and attempt == 0:
+                        await page.wait_for_timeout(1500)
+                        continue
+                    raise eval_err
 
             extracted_products = []
             search_words = [w for w in product_name.lower().split() if len(w) > 2]
