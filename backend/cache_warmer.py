@@ -11,6 +11,13 @@ import sys
 import time
 import argparse
 import warnings
+from pathlib import Path
+
+# Ensure backend directory is in sys.path
+backend_dir = str(Path(__file__).resolve().parent)
+if backend_dir not in sys.path:
+    sys.path.insert(0, backend_dir)
+
 from redis_client import r
 from scrapers.scraper import scrape_all
 from scraper_service import set_cache

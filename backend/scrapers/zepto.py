@@ -31,7 +31,7 @@ except ImportError:
     )
 
 
-BASE_URL = "https://www.zeptonow.com"
+BASE_URL = "https://www.zepto.com"
 
 
 async def scrape_zepto(product_name, headless=True, lat=12.9716, lon=77.5946):
@@ -75,9 +75,12 @@ async def scrape_zepto(product_name, headless=True, lat=12.9716, lon=77.5946):
 
             # Wait for actual prices to render (skeleton cards don't have ₹ signs)
             try:
-                await page.wait_for_selector('text=₹', timeout=25000)
+                await page.wait_for_selector('[data-slot-id="EdlpPrice"], [data-testid="product-price"], #productSchema', timeout=20000)
             except Exception:
-                pass
+                try:
+                    await page.wait_for_selector('text=₹', timeout=10000)
+                except Exception:
+                    pass
 
             await page.wait_for_timeout(1000)
 
@@ -93,89 +96,152 @@ async def scrape_zepto(product_name, headless=True, lat=12.9716, lon=77.5946):
             cards_data = []
             for attempt in range(2):
                 try:
-                    cards_data = await page.locator(
-                        'a[data-testid="product-card"], div[data-testid="product-card"], a[href*="/pn/"], a[href*="/prn/"]'
-                    ).evaluate_all("""
-                cards => cards.map(card => {
-                    const getText = (selector) => {
-                        const el = card.querySelector(selector);
-                        return el ? el.innerText.trim() : null;
-                    };
+                    cards_data = await page.evaluate("""
+                () => {
+                    const results = [];
 
-                    const priceContainer = card.querySelector(
-                        '[data-slot-id="EdlpPrice"]'
-                    );
+                    // 1. Extract from JSON-LD Schema (#productSchema) if on a Product Detail Page (PDP)
+                    const schemaEl = document.querySelector('script#productSchema[type="application/ld+json"]');
+                    if (schemaEl) {
+                        try {
+                            const schema = JSON.parse(schemaEl.innerText);
+                            if (schema && schema.name && schema.offers) {
+                                const offerPrice = schema.offers.price ? parseFloat(schema.offers.price) : null;
+                                if (offerPrice && offerPrice > 0) {
+                                    const pdpName = schema.name;
+                                    const pdpQty = schema.size || (schema.weight && schema.weight.value ? `${schema.weight.value} g` : '');
+                                    const pdpImg = Array.isArray(schema.image) ? schema.image[0] : schema.image;
+                                    const pdpUrl = schema.url || window.location.href;
+                                    results.push({
+                                        name: pdpName,
+                                        prices: [offerPrice],
+                                        quantity: pdpQty,
+                                        image: pdpImg,
+                                        productUrl: pdpUrl,
+                                        outOfStock: schema.offers.availability ? !schema.offers.availability.includes("InStock") : false,
+                                        eta: "10 mins"
+                                    });
+                                }
+                            }
+                        } catch (e) {}
+                    }
 
-                    const priceText = priceContainer
-                        ? priceContainer.innerText
-                        : (card.innerText || '');
-
-                    const prices = (
-                        priceText.match(/₹\\s*[\\d,.]+/g) || []
-                    ).map(p =>
-                        parseFloat(p.replace(/[^\\d.]/g, ''))
-                    ).filter(p => !isNaN(p) && p > 0);
-
-                    // Name resolution: check slot, then image alt/title, then headings
-                    let name = getText('[data-slot-id="ProductName"]');
-                    if (!name) {
-                        const img = card.querySelector('img[title], img[alt]');
-                        if (img) {
-                            name = (img.getAttribute('title') || img.getAttribute('alt') || '').trim();
+                    // 2. Extract from PDP DOM elements if on a PDP without schema
+                    if (results.length === 0) {
+                        const pdpInfo = document.querySelector('[data-testid="pdp-product-info"]');
+                        const pdpPriceEl = document.querySelector('[data-testid="product-price"]');
+                        if (pdpInfo && pdpPriceEl) {
+                            const h = pdpInfo.querySelector('h1, h2');
+                            const pName = h ? h.innerText.trim() : '';
+                            const pPrice = parseFloat(pdpPriceEl.innerText.replace(/[^\\d.]/g, ''));
+                            const qtyEl = document.querySelector('[data-testid="pdp-net-quantity"]');
+                            const pQty = qtyEl ? qtyEl.innerText.replace(/^Net Qty:\\s*/i, '').trim() : '';
+                            const etaEl = document.querySelector('#eta-strip');
+                            const pEta = etaEl ? etaEl.innerText.replace(/\\s+/g, ' ').trim() : '10 mins';
+                            const imgEl = document.querySelector('img[alt*="' + pName.slice(0, 10) + '"]');
+                            if (pName && pPrice > 0) {
+                                results.push({
+                                    name: pName,
+                                    prices: [pPrice],
+                                    quantity: pQty,
+                                    image: imgEl ? imgEl.src : null,
+                                    productUrl: window.location.href,
+                                    outOfStock: false,
+                                    eta: pEta
+                                });
+                            }
                         }
                     }
-                    if (!name) {
-                        const h = card.querySelector('h3, h4, h5, [data-testid="product-name"], [class*="product-name"]');
-                        if (h) name = h.innerText.trim();
+
+                    // 3. Extract from all product cards (Search results, similar products rails)
+                    const cardEls = Array.from(document.querySelectorAll(
+                        'a[data-testid="product-card"], div[data-testid="product-card"], a[href*="/pn/"], a[href*="/prn/"]'
+                    ));
+
+                    for (const card of cardEls) {
+                        const getText = (selector) => {
+                            const el = card.querySelector(selector);
+                            return el ? el.innerText.trim() : null;
+                        };
+
+                        const priceContainer = card.querySelector(
+                            '[data-slot-id="EdlpPrice"], [data-testid="product-price"]'
+                        );
+
+                        const priceText = priceContainer
+                            ? priceContainer.innerText
+                            : (card.innerText || '');
+
+                        const prices = (
+                            priceText.match(/₹\\s*[\\d,.]+/g) || []
+                        ).map(p =>
+                            parseFloat(p.replace(/[^\\d.]/g, ''))
+                        ).filter(p => !isNaN(p) && p > 0);
+
+                        // Name resolution: check slot, then image alt/title, then headings
+                        let name = getText('[data-slot-id="ProductName"]');
+                        if (!name) {
+                            const img = card.querySelector('img[title], img[alt]');
+                            if (img) {
+                                name = (img.getAttribute('title') || img.getAttribute('alt') || '').trim();
+                            }
+                        }
+                        if (!name) {
+                            const h = card.querySelector('h3, h4, h5, [data-testid="product-name"], [class*="product-name"]');
+                            if (h) name = h.innerText.trim();
+                        }
+                        if (!name && card.innerText) {
+                            const lines = card.innerText.split('\\n').map(l => l.trim()).filter(Boolean);
+                            const candidate = lines.find(l => !l.startsWith('₹') && l !== 'ADD' && !/\\d+\\s*(?:pack|ml|g|kg)/i.test(l));
+                            if (candidate) name = candidate;
+                        }
+
+                        // Pack / quantity resolution
+                        let quantity = getText('[data-slot-id="PackSize"]');
+                        if (!quantity) {
+                            const q = card.querySelector('[data-testid="product-quantity"], [data-slot-id="pack-size"]');
+                            if (q) quantity = q.innerText.trim();
+                        }
+                        if (!quantity && card.innerText) {
+                            const qMatch = card.innerText.match(/\\d+(?:\\.\\d+)?\\s*(?:ml|l|ltr|litre|g|gm|gram|kg|kilo|pcs?|pieces?|units?|packs?)/i);
+                            if (qMatch) quantity = qMatch[0];
+                        }
+
+                        const image = card.querySelector(
+                            '[data-slot-id="ProductImageWrapper"] img, img'
+                        );
+
+                        const productUrl = card.getAttribute('href') || (card.querySelector('a') ? card.querySelector('a').getAttribute('href') : null);
+
+                        const productContainer = card.querySelector(
+                            '[data-is-out-of-stock]'
+                        );
+
+                        const outOfStock = productContainer
+                            ? productContainer.getAttribute(
+                                'data-is-out-of-stock'
+                            ) === 'true'
+                            : (card.innerText && card.innerText.toLowerCase().includes("out of stock"));
+
+                        const eta = getText(
+                            '[data-slot-id="EtaInformation"]'
+                        ) || '10 mins';
+
+                        if (name && prices.length > 0) {
+                            results.push({
+                                name,
+                                prices,
+                                quantity,
+                                image: image ? (image.src || image.getAttribute('src')) : null,
+                                productUrl,
+                                outOfStock,
+                                eta
+                            });
+                        }
                     }
-                    if (!name && card.innerText) {
-                        // Zepto text format: line 0 ADD, line 1 ₹27, line 2 Product Name, line 3 Pack
-                        const lines = card.innerText.split('\\n').map(l => l.trim()).filter(Boolean);
-                        const candidate = lines.find(l => !l.startsWith('₹') && l !== 'ADD' && !/\\d+\\s*(?:pack|ml|g|kg)/i.test(l));
-                        if (candidate) name = candidate;
-                    }
 
-                    // Pack / quantity resolution
-                    let quantity = getText('[data-slot-id="PackSize"]');
-                    if (!quantity) {
-                        const q = card.querySelector('[data-testid="product-quantity"], [data-slot-id="pack-size"]');
-                        if (q) quantity = q.innerText.trim();
-                    }
-                    if (!quantity && card.innerText) {
-                        const qMatch = card.innerText.match(/\\d+(?:\\.\\d+)?\\s*(?:ml|l|ltr|litre|g|gm|gram|kg|kilo|pcs?|pieces?|units?|packs?)/i);
-                        if (qMatch) quantity = qMatch[0];
-                    }
-
-                    const image = card.querySelector(
-                        '[data-slot-id="ProductImageWrapper"] img, img'
-                    );
-
-                    const productUrl = card.getAttribute('href') || (card.querySelector('a') ? card.querySelector('a').getAttribute('href') : null);
-
-                    const productContainer = card.querySelector(
-                        '[data-is-out-of-stock]'
-                    );
-
-                    const outOfStock = productContainer
-                        ? productContainer.getAttribute(
-                            'data-is-out-of-stock'
-                        ) === 'true'
-                        : (card.innerText && card.innerText.toLowerCase().includes("out of stock"));
-
-                    const eta = getText(
-                        '[data-slot-id="EtaInformation"]'
-                    ) || '10 mins';
-
-                    return {
-                        name,
-                        prices,
-                        quantity,
-                        image: image ? (image.src || image.getAttribute('src')) : null,
-                        productUrl,
-                        outOfStock,
-                        eta
-                    };
-                })
+                    return results;
+                }
             """)
                     if cards_data and any(c.get("prices") for c in cards_data):
                         break
