@@ -15,7 +15,7 @@ export default function DealsPage({ onNavigate }) {
         </div>
         <h1 className="deals-hero-title">Today's best deals</h1>
         <p className="deals-hero-copy">
-          The biggest price drops we've found across Blinkit, Zepto, BigBasket and JioMart right now.
+          The biggest price drops we've found across Blinkit, Zepto, and BigBasket right now.
         </p>
       </section>
 

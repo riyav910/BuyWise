@@ -24,7 +24,7 @@ const STORY_STEPS = [
   {
     tag: "The approach",
     title: "One search across every platform",
-    copy: "BuyWise queries Blinkit, Zepto, BigBasket and JioMart in parallel for a given product, returning all four results together instead of requiring separate searches.",
+    copy: "BuyWise queries Blinkit, Zepto, and BigBasket in parallel for a given product, returning all results together instead of requiring separate searches.",
   },
   {
     tag: "The ranking",
@@ -88,7 +88,7 @@ export default function AboutPage({ onNavigate }) {
             <span className="home-hero-title-accent">quick-commerce prices.</span>
           </h1>
           <p className="about-hero-copy">
-            BuyWise compares live prices across Blinkit, Zepto, BigBasket and JioMart, and ranks results
+            BuyWise compares live prices across Blinkit, Zepto, and BigBasket, and ranks results
             by total cost — including delivery — so you can see the best option at a glance.
           </p>
 

@@ -154,7 +154,12 @@ async def main_async(args):
     sem = asyncio.Semaphore(workers)
 
     # Fetch dynamic warming targets (from MongoDB or static fallback)
-    if get_dynamic_cache_warm_targets:
+    if args.items:
+        custom_items = [it.strip().lower() for it in args.items.split(",") if it.strip()]
+        tier1_items = custom_items
+        tier2_items = []
+        source_label = f"custom_cli_items ({len(custom_items)})"
+    elif get_dynamic_cache_warm_targets:
         targets_info = get_dynamic_cache_warm_targets()
         tier1_items = targets_info.get("very_frequent", VERY_FREQUENT_ITEMS)
         tier2_items = targets_info.get("moderate", MODERATE_ITEMS)
@@ -226,6 +231,12 @@ def main():
         "--initial-only",
         action="store_true",
         help="Perform initial pre-warming pass once and exit"
+    )
+    parser.add_argument(
+        "--items",
+        type=str,
+        default=None,
+        help="Comma-separated custom items to warm (e.g. 'milk,bread,butter,eggs')"
     )
 
     args = parser.parse_args()

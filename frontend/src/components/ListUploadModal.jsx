@@ -234,7 +234,7 @@ export default function ListUploadModal({
             <div>
               <h2 className="ocr-modal-title">Scan Grocery List Photo</h2>
               <p className="ocr-modal-subtitle">
-                Upload a photo or screenshot of your computer-typed shopping list to compare prices across Blinkit, Zepto, BigBasket & JioMart.
+                Upload a photo or screenshot of your computer-typed shopping list to compare prices across Blinkit, Zepto & BigBasket.
               </p>
             </div>
           </div>

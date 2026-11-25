@@ -17,10 +17,10 @@ export const COLORS = {
   swiggyBg: "#fff3ef",
   bigbasket: "#0d6efd",
   bigbasketBg: "#eff6ff",
-  jiomart: "#0f766e",
-  jiomartBg: "#ecfdf5",
   greenPale: "#d1fae5",
 };
+
+export const ACTIVE_PLATFORMS = ["blinkit", "zepto", "bigbasket"];
 
 export const PLATFORM_META = {
   blinkit: {
@@ -49,15 +49,6 @@ export const PLATFORM_META = {
     bg: COLORS.bigbasketBg,
     btnColor: COLORS.bigbasket,
     searchBase: "https://www.bigbasket.com/ps/?q=",
-  },
-  jiomart: {
-    id: "jiomart",
-    name: "JioMart",
-    initial: "J",
-    color: COLORS.jiomart,
-    bg: COLORS.jiomartBg,
-    btnColor: COLORS.jiomart,
-    searchBase: "https://www.jiomart.com/search/",
   },
 };
 
@@ -119,7 +110,6 @@ export const PLATFORMS = [
   { name: "Blinkit", initial: "B", color: COLORS.blinkit, bg: "#fffbea" },
   { name: "Zepto", initial: "Z", color: COLORS.zepto, bg: "#f9f0fb" },
   { name: "BigBasket", initial: "BB", color: COLORS.bigbasket, bg: COLORS.bigbasketBg },
-  { name: "JioMart", initial: "J", color: COLORS.jiomart, bg: COLORS.jiomartBg },
 ];
 
 export const TRENDING = [
@@ -131,10 +121,10 @@ export const TRENDING = [
   { emoji: "🍊", name: "Tropicana OJ 1L", platform: "Blinkit", price: "₹90", save: "Save ₹29" },
   { emoji: "🍞", name: "Britannia Bread 400g", platform: "Zepto", price: "₹42", save: "Save ₹8" },
   { emoji: "🧈", name: "Amul Butter 100g", platform: "BigBasket", price: "₹52", save: "Save ₹6" },
-  { emoji: "🥚", name: "Farm Eggs 12pc", platform: "JioMart", price: "₹84", save: "Save ₹11" },
+  { emoji: "🥚", name: "Farm Eggs 12pc", platform: "BigBasket", price: "₹84", save: "Save ₹11" },
   { emoji: "🍚", name: "India Gate Basmati 1kg", platform: "BigBasket", price: "₹149", save: "18% off" },
   { emoji: "🧴", name: "Dove Shampoo 340ml", platform: "Zepto", price: "₹279", save: "Save ₹40" },
-  { emoji: "🍫", name: "Dairy Milk 55g x5", platform: "JioMart", price: "₹150", save: "Save ₹25" },
+  { emoji: "🍫", name: "Dairy Milk 55g x5", platform: "Zepto", price: "₹150", save: "Save ₹25" },
 ];
 
 export function Badge({ children, variant = "default" }) {
@@ -142,86 +132,134 @@ export function Badge({ children, variant = "default" }) {
 }
 
 export function PlatformCard({ item }) {
-  const total = item.price + item.delivery;
+  const isAvailable = item.isAvailable !== false && item.price !== null && item.price !== undefined;
+  const total = isAvailable ? item.price + (item.delivery ?? 0) : null;
   const pillClass = `app-platform-card-pill app-platform-card-pill--${item.id}`;
   const buttonClass = `app-platform-card-button app-platform-card-button--${item.id}`;
 
   return (
-    <div className="app-platform-card fade-up">
+    <div className={`app-platform-card fade-up ${!isAvailable ? "app-platform-card--unavailable" : ""}`}>
       <div className="app-platform-card-top">
         <div className="app-platform-card-brand">
           <div className={pillClass}>{item.initial}</div>
           <div>
             <div className="app-platform-card-name">{item.name}</div>
-            <div className="app-platform-card-subtitle" title={item.product_name} style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: "160px" }}>
+            <div
+              className="app-platform-card-subtitle"
+              title={item.product_name}
+              style={{
+                whiteSpace: "nowrap",
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+                maxWidth: "160px",
+                color: !isAvailable ? "#dc2626" : undefined,
+                fontWeight: !isAvailable ? 600 : undefined
+              }}
+            >
               {item.product_name}
             </div>
           </div>
         </div>
         <div style={{ display: "flex", gap: "4px", flexWrap: "wrap", justifyContent: "flex-end" }}>
-          {item.isAssignedStore && (
-            <span
-              style={{
-                background: "#0f766e",
-                color: "#ffffff",
-                fontSize: "11px",
-                fontWeight: 700,
-                padding: "2px 8px",
-                borderRadius: "999px",
-                display: "inline-flex",
-                alignItems: "center",
-                gap: "3px",
-              }}
-              title="Recommended store assigned by Cart Optimizer for best overall checkout total"
-            >
-              🎯 Assigned
-            </span>
+          {!isAvailable ? (
+            <Badge variant="warn">Not Available</Badge>
+          ) : (
+            <>
+              {item.isAssignedStore && (
+                <span
+                  style={{
+                    background: "#0f766e",
+                    color: "#ffffff",
+                    fontSize: "11px",
+                    fontWeight: 700,
+                    padding: "2px 8px",
+                    borderRadius: "999px",
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: "3px",
+                  }}
+                  title="Recommended store assigned by Cart Optimizer for best overall checkout total"
+                >
+                  🎯 Assigned
+                </span>
+              )}
+              {item.best && <Badge variant="success">Best deal</Badge>}
+              {item.isBestUnitPrice && <Badge variant="info">Best unit rate</Badge>}
+            </>
           )}
-          {item.best && <Badge variant="success">Best deal</Badge>}
-          {item.isBestUnitPrice && <Badge variant="info">Best unit rate</Badge>}
         </div>
       </div>
 
-      <div className="app-platform-card-price-row" style={{ alignItems: "baseline", flexWrap: "wrap", gap: "8px" }}>
-        <span className="app-platform-card-price">₹{item.price}</span>
-        {item.packageDisplay && (
-          <span style={{ fontSize: "0.85rem", color: "#666", fontWeight: 500 }}>
-            ({item.packageDisplay})
-          </span>
-        )}
-        {item.unitPriceDisplay && (
-          <span className="app-chip app-chip--good" style={{ fontSize: "0.75rem", padding: "2px 8px" }}>
-            {item.unitPriceDisplay}
-          </span>
-        )}
-        {item.discount > 0 && <span className="app-platform-card-discount">{item.discount}% off</span>}
-      </div>
+      {isAvailable ? (
+        <>
+          <div className="app-platform-card-price-row" style={{ alignItems: "baseline", flexWrap: "wrap", gap: "8px" }}>
+            <span className="app-platform-card-price">₹{item.price}</span>
+            {item.packageDisplay && (
+              <span style={{ fontSize: "0.85rem", color: "#666", fontWeight: 500 }}>
+                ({item.packageDisplay})
+              </span>
+            )}
+            {item.unitPriceDisplay && (
+              <span className="app-chip app-chip--good" style={{ fontSize: "0.75rem", padding: "2px 8px" }}>
+                {item.unitPriceDisplay}
+              </span>
+            )}
+            {item.discount > 0 && <span className="app-platform-card-discount">{item.discount}% off</span>}
+          </div>
 
+          <div className="app-platform-card-chip-row">
+            <span className={`app-chip app-chip--${item.deliveryChip}`}>{item.deliveryLabel}</span>
+            <span className="app-chip app-chip--neutral">{item.time}</span>
+            <span className={`app-chip app-chip--${item.stockChip}`}>{item.stock}</span>
+          </div>
 
-      <div className="app-platform-card-chip-row">
-        <span className={`app-chip app-chip--${item.deliveryChip}`}>{item.deliveryLabel}</span>
-        <span className="app-chip app-chip--neutral">{item.time}</span>
-        <span className={`app-chip app-chip--${item.stockChip}`}>{item.stock}</span>
-      </div>
+          <div className="app-platform-card-total-row">
+            <span>Total</span>
+            <span className={item.best ? "app-platform-card-total-best" : "app-platform-card-total"}>₹{total}</span>
+          </div>
 
-      <div className="app-platform-card-total-row">
-        <span>Total</span>
-        <span className={item.best ? "app-platform-card-total-best" : "app-platform-card-total"}>₹{total}</span>
-      </div>
-
-      {item.product_url || (item.searchUrl && item.product_name) ? (
-        <a
-          href={item.product_url || `${item.searchUrl}${encodeURIComponent(item.product_name)}`}
-          target="_blank"
-          rel="noopener noreferrer"
-          className={buttonClass}
-        >
-          View on {item.name}
-        </a>
+          {item.product_url || (item.searchUrl && item.product_name) ? (
+            <a
+              href={item.product_url || `${item.searchUrl}${encodeURIComponent(item.product_name)}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className={buttonClass}
+            >
+              View on {item.name}
+            </a>
+          ) : (
+            <span className={`${buttonClass} app-platform-card-button-disabled`}>
+              Link unavailable
+            </span>
+          )}
+        </>
       ) : (
-        <span className={`${buttonClass} app-platform-card-button-disabled`}>
-          Link unavailable
-        </span>
+        <>
+          <div className="app-platform-card-price-row" style={{ alignItems: "center", minHeight: "36px" }}>
+            <span style={{ fontSize: "1.05rem", fontWeight: 700, color: "#dc2626" }}>
+              Item Not Available
+            </span>
+          </div>
+
+          <div className="app-platform-card-chip-row">
+            <span className="app-chip app-chip--warn">Out of stock / Not found</span>
+          </div>
+
+          <div className="app-platform-card-total-row" style={{ color: "#94a3b8" }}>
+            <span>Total</span>
+            <span>—</span>
+          </div>
+
+          <a
+            href={item.searchUrl ? `${item.searchUrl}${encodeURIComponent(item.search_term || "")}` : "#"}
+            target="_blank"
+            rel="noopener noreferrer"
+            className={`${buttonClass} app-platform-card-button--search`}
+            style={{ opacity: 0.9 }}
+          >
+            Search on {item.name} ↗
+          </a>
+        </>
       )}
     </div>
   );

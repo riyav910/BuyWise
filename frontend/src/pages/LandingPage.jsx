@@ -15,9 +15,7 @@ import {
 const PLATFORMS = [
   { name: "Blinkit", color: "#F6C828" },
   { name: "Zepto", color: "#CC00FF" },
-  { name: "Swiggy Instamart", color: "#FC8019" },
   { name: "BigBasket", color: "#84C225" },
-  { name: "JioMart", color: "#005EAA" },
 ];
 
 const FEATURES = [
@@ -141,8 +139,8 @@ export default function LandingPage() {
           marginBottom: "30px",
         }}
       >
-        Real-time grocery price comparison across Blinkit, Zepto, Swiggy Instamart,
-        BigBasket & JioMart. Our smart basket optimizer finds the cheapest way.
+        Real-time grocery price comparison across Blinkit, Zepto, and
+        BigBasket. Our smart basket optimizer finds the cheapest way.
       </p>
 
       {/* SEARCH */}

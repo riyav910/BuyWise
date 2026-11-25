@@ -84,7 +84,7 @@ export default function ScraperProgressCard({ searchQuery = "", loadingPhase = "
 
           <p className="scraper-progress-subtext">
             {isScraping
-              ? "Scraping real-time product prices, stock, and delivery fees across Blinkit, Zepto, BigBasket & JioMart..."
+              ? "Scraping real-time product prices, stock, and delivery fees across Blinkit, Zepto & BigBasket..."
               : "Normalizing quantities (per kg/L), factoring delivery thresholds & evaluating split-order savings..."}
           </p>
         </div>
@@ -188,18 +188,6 @@ export default function ScraperProgressCard({ searchQuery = "", loadingPhase = "
           </div>
           <div className="scraper-platform-status">
             {isScraping ? "Extracting pack sizes & fees..." : "Prices extracted ✓"}
-          </div>
-        </div>
-
-        {/* JIOMART */}
-        <div className="scraper-platform-tile platform-jiomart">
-          <div className="scraper-platform-top">
-            <span className="scraper-platform-avatar avatar-jiomart">J</span>
-            <div className="scraper-platform-name">JioMart</div>
-            <span className={`scraper-mini-dot ${isScraping ? "dot-pulsing-teal" : "dot-done"}`} />
-          </div>
-          <div className="scraper-platform-status">
-            {isScraping ? "Checking stock & availability..." : "Prices extracted ✓"}
           </div>
         </div>
       </div>

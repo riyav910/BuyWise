@@ -94,7 +94,7 @@ export default function HomePage({
             </h1>
 
             <p className="fade-up-2 home-hero-copy">
-              BuyWise compares real-time prices across Blinkit, Zepto & Swiggy Instamart — and uses ML to predict when to buy.
+              BuyWise compares real-time prices across Blinkit, Zepto & BigBasket — and uses ML to predict when to buy.
             </p>
 
             <form className="fade-up-3 home-search-form" onSubmit={handleSearch}>

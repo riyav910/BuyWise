@@ -13,7 +13,7 @@ import ComparePage from "./ComparePage";
 import LoginPage from "./pages/LoginPage";
 import CreateAccount from "./pages/CreateAccount";
 import ProfilePage from "./pages/ProfilePage";
-import { PLATFORM_META, COLORS } from "./AppContent";
+import { PLATFORM_META, COLORS, ACTIVE_PLATFORMS } from "./AppContent";
 
 function mapItemToPlatform(item, bestDeal, bestUnitPrice, recommendedPlatform) {
   const platformKey = (item.platform || "").toLowerCase();
@@ -27,55 +27,99 @@ function mapItemToPlatform(item, bestDeal, bestUnitPrice, recommendedPlatform) {
     searchBase: "",
   };
 
-  const productName = item.product_name || item.name || "Product";
-  const price = item.price ?? 0;
-  const delivery = item.delivery ?? 0;
+  const isAvailable = item.isAvailable !== false && item.price !== null && item.price !== undefined && Number(item.price) > 0;
+  const productName = item.product_name || item.name || (isAvailable ? "Product" : `Not available on ${meta.name}`);
+  const price = isAvailable ? Number(item.price) : null;
+  const delivery = isAvailable ? Number(item.delivery ?? 0) : null;
   const isBestDeal =
-    (bestDeal?.platform?.toLowerCase() === platformKey &&
+    isAvailable &&
+    ((bestDeal?.platform?.toLowerCase() === platformKey &&
       (!item.search_term ||
         !bestDeal?.search_term ||
         item.search_term.toLowerCase() === bestDeal?.search_term.toLowerCase())) ||
-    Boolean(item.is_best_deal);
+      Boolean(item.is_best_deal));
   const isBestUnitPrice =
-    bestUnitPrice?.platform?.toLowerCase() === platformKey ||
-    Boolean(item.is_best_unit_price);
+    isAvailable &&
+    (bestUnitPrice?.platform?.toLowerCase() === platformKey ||
+      Boolean(item.is_best_unit_price));
   const isAssignedStore =
-    Boolean(item.is_assigned_store) ||
-    (recommendedPlatform && recommendedPlatform.toLowerCase() === platformKey);
+    isAvailable &&
+    (Boolean(item.is_assigned_store) ||
+      (recommendedPlatform && recommendedPlatform.toLowerCase() === platformKey));
   const packageDisplay =
     item.package_display || (item.qty && item.unit ? `${item.qty} ${item.unit}` : "");
   const unitPriceDisplay =
     item.unit_price_display ||
     (item.unit_price ? `₹${item.unit_price}/${item.unit_price_unit || "unit"}` : "");
 
-  const deliveryLabel = delivery === 0 ? "Free delivery" : `₹${delivery} delivery`;
-  const stockChip =
-    platformKey === "blinkit" ? "good" : platformKey === "swiggy" ? "warn" : "neutral";
-  const stockText = platformKey === "swiggy" ? "Low stock" : "In stock";
-  const timeLabel = item.eta ? `${item.eta} min` : "—";
-  const original = Math.max(price, item.original ?? price);
+  const deliveryLabel = !isAvailable ? "—" : (delivery === 0 ? "Free delivery" : `₹${delivery} delivery`);
+  const stockChip = !isAvailable ? "warn" : (platformKey === "blinkit" ? "good" : "neutral");
+  const stockText = !isAvailable ? "Unavailable" : "In stock";
+  const timeLabel = isAvailable && item.eta ? `${item.eta} min` : "—";
+  const original = isAvailable ? Math.max(price, item.original ?? price) : null;
 
   return {
     ...meta,
+    platform: platformKey,
     platformLabel: meta.name,
     product_name: productName,
     packageDisplay,
     unitPriceDisplay,
     isBestUnitPrice,
     isAssignedStore,
+    isAvailable,
     price,
     original,
-    discount: original > price ? Math.round(((original - price) / original) * 100) : 0,
+    discount: (isAvailable && original > price) ? Math.round(((original - price) / original) * 100) : 0,
     delivery,
     deliveryLabel,
-    deliveryChip: delivery === 0 ? "good" : stockChip,
+    deliveryChip: !isAvailable ? "warn" : (delivery === 0 ? "good" : stockChip),
     time: timeLabel,
     stock: stockText,
+    stockChip,
     best: isBestDeal,
     product_url: item.product_url || null,
     searchUrl: meta.searchBase,
     search_term: item.search_term,
   };
+}
+
+function getCompletePlatformsForTerm(searchTerm, foundItems = [], bestDeal = null, bestUnitPrice = null, recommendedPlatform = null) {
+  const byPlat = {};
+  (foundItems || []).forEach((item) => {
+    if (item && item.platform) {
+      const pKey = item.platform.toLowerCase().trim();
+      if (ACTIVE_PLATFORMS.includes(pKey)) {
+        byPlat[pKey] = item;
+      }
+    }
+  });
+
+  return ACTIVE_PLATFORMS.map((platKey) => {
+    if (byPlat[platKey]) {
+      return mapItemToPlatform(byPlat[platKey], bestDeal, bestUnitPrice, recommendedPlatform);
+    }
+    const meta = PLATFORM_META[platKey] || {
+      id: platKey,
+      name: platKey.charAt(0).toUpperCase() + platKey.slice(1),
+      initial: platKey.slice(0, 2).toUpperCase(),
+      searchBase: "",
+    };
+    return mapItemToPlatform(
+      {
+        platform: platKey,
+        name: meta.name,
+        product_name: `Not available on ${meta.name}`,
+        price: null,
+        delivery: null,
+        isAvailable: false,
+        search_term: searchTerm,
+      },
+      null,
+      null,
+      null
+    );
+  });
 }
 
 function MainApp() {
@@ -190,14 +234,16 @@ function MainApp() {
   // Single-product or flat platforms list fallback
   const platforms = useMemo(() => {
     const recPlatform = result?.recommended_platform || result?.recommended_checkout?.platforms_used?.[0];
-    return (
-      result?.all?.map((item) =>
-        mapItemToPlatform(item, result?.best, result?.best_unit_price, recPlatform)
-      ) || []
-    );
-  }, [result]);
+    const singleTerm = result?.items?.[0] || input || "product";
+    return getCompletePlatformsForTerm(singleTerm, result?.all, result?.best, result?.best_unit_price, recPlatform);
+  }, [result, input]);
 
-  const maxTotal = Math.max(1, ...platforms.map((item) => item.price + item.delivery));
+  const maxTotal = useMemo(() => {
+    const validPrices = platforms
+      .filter((item) => item.isAvailable && item.price !== null)
+      .map((item) => item.price + (item.delivery ?? 0));
+    return validPrices.length > 0 ? Math.max(...validPrices) : 100;
+  }, [platforms]);
 
   // Multi-product detection & separation
   const products = useMemo(() => {
@@ -206,10 +252,18 @@ function MainApp() {
     // If backend provided by_product mapping
     if (result.by_product && Object.keys(result.by_product).length > 0) {
       return Object.entries(result.by_product).map(([term, data]) => {
-        const prodPlatforms = (data.all || []).map((item) =>
-          mapItemToPlatform(item, data.best, data.best_unit_price, data.recommended_platform)
+        const prodPlatforms = getCompletePlatformsForTerm(
+          term,
+          data.all,
+          data.best,
+          data.best_unit_price,
+          data.recommended_platform
         );
-        const prodMaxTotal = Math.max(1, ...prodPlatforms.map((p) => p.price + p.delivery));
+        const validPrices = prodPlatforms
+          .filter((p) => p.isAvailable && p.price !== null)
+          .map((p) => p.price + (p.delivery ?? 0));
+        const prodMaxTotal = validPrices.length > 0 ? Math.max(...validPrices) : 100;
+
         return {
           term,
           best: data.best,
@@ -239,10 +293,12 @@ function MainApp() {
           const items = termMap[term];
           const best = items.find((i) => i.is_best_deal) || items[0];
           const bestUnit = items.find((i) => i.is_best_unit_price) || null;
-          const prodPlatforms = items.map((item) =>
-            mapItemToPlatform(item, best, bestUnit)
-          );
-          const prodMaxTotal = Math.max(1, ...prodPlatforms.map((p) => p.price + p.delivery));
+          const prodPlatforms = getCompletePlatformsForTerm(term, items, best, bestUnit);
+          const validPrices = prodPlatforms
+            .filter((p) => p.isAvailable && p.price !== null)
+            .map((p) => p.price + (p.delivery ?? 0));
+          const prodMaxTotal = validPrices.length > 0 ? Math.max(...validPrices) : 100;
+
           return {
             term,
             best,

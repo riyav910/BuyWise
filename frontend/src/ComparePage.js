@@ -298,6 +298,234 @@ function SmartCartOptimizerCard({ optimized, products }) {
   );
 }
 
+function PlatformStoreOverviewCard({ products = [], platforms = [], isMulti = false, input = "" }) {
+  const storeData = [
+    { id: "blinkit", name: "Blinkit", initial: "B", color: "#c49b00", bg: "#fffbea", searchBase: "https://blinkit.com/s/?q=" },
+    { id: "zepto", name: "Zepto", initial: "Z", color: "#1b1f7c", bg: "#f9f0fb", searchBase: "https://www.zeptonow.com/search?query=" },
+    { id: "bigbasket", name: "BigBasket", initial: "BB", color: "#0d6efd", bg: "#eff6ff", searchBase: "https://www.bigbasket.com/ps/?q=" },
+  ];
+
+  const storeSummaries = storeData.map((store) => {
+    let itemsForStore = [];
+
+    if (isMulti && products.length > 0) {
+      itemsForStore = products.map((prod) => {
+        const match = (prod.platforms || []).find((p) => (p.id || p.platform || "").toLowerCase() === store.id);
+        const isAvailable = Boolean(match && match.isAvailable && match.price !== null);
+        return {
+          term: prod.term,
+          isAvailable,
+          item: match || null,
+        };
+      });
+    } else {
+      const singleTerm = products[0]?.term || input || "Product";
+      const match = (platforms || []).find((p) => (p.id || p.platform || "").toLowerCase() === store.id);
+      const isAvailable = Boolean(match && match.isAvailable && match.price !== null);
+      itemsForStore = [
+        {
+          term: singleTerm,
+          isAvailable,
+          item: match || null,
+        },
+      ];
+    }
+
+    const availableCount = itemsForStore.filter((i) => i.isAvailable).length;
+    const totalItems = itemsForStore.length;
+    const subtotal = itemsForStore
+      .filter((i) => i.isAvailable)
+      .reduce((acc, curr) => acc + (curr.item?.price ?? 0), 0);
+
+    return {
+      ...store,
+      items: itemsForStore,
+      availableCount,
+      totalItems,
+      subtotal,
+    };
+  });
+
+  return (
+    <div className="app-store-overview-card fade-up">
+      <div className="app-store-overview-header">
+        <div>
+          <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap", marginBottom: "4px" }}>
+            <span className="app-optimizer-badge" style={{ background: "#eff6ff", color: "#1e40af", borderColor: "#bfdbfe" }}>
+              🏬 Platform Item Catalog
+            </span>
+            <span style={{ fontSize: "12px", color: "#64748b", fontWeight: 600 }}>
+              Live selling prices & availability across all stores
+            </span>
+          </div>
+          <h2 style={{ fontSize: "18px", fontWeight: 800, color: "#0f172a", margin: "4px 0 2px" }}>
+            Compare All Searched Items by Platform
+          </h2>
+          <p style={{ fontSize: "13px", color: "#64748b", margin: 0 }}>
+            Every platform displays each searched item along with its live price and pack size, or indicates if unavailable.
+          </p>
+        </div>
+      </div>
+
+      <div className="app-store-overview-grid">
+        {storeSummaries.map((store) => (
+          <div key={`store-col-${store.id}`} className={`app-store-col app-store-col--${store.id}`}>
+            {/* Store Card Header */}
+            <div className="app-store-col-header" style={{ borderBottom: `2px solid ${store.color}` }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                <span className={`app-platform-card-pill app-platform-card-pill--${store.id}`}>
+                  {store.initial}
+                </span>
+                <div>
+                  <div style={{ fontWeight: 800, fontSize: "15px", color: "#0f172a" }}>
+                    {store.name}
+                  </div>
+                  <div style={{ fontSize: "11px", color: "#64748b" }}>
+                    Quick Commerce
+                  </div>
+                </div>
+              </div>
+
+              <div style={{ textAlign: "right" }}>
+                <span
+                  style={{
+                    fontSize: "11px",
+                    fontWeight: 700,
+                    padding: "3px 8px",
+                    borderRadius: "999px",
+                    background: store.availableCount === store.totalItems ? "#dcfce7" : store.availableCount > 0 ? "#fef3c7" : "#fee2e2",
+                    color: store.availableCount === store.totalItems ? "#166534" : store.availableCount > 0 ? "#92400e" : "#991b1b",
+                    border: `1px solid ${store.availableCount === store.totalItems ? "#bbf7d0" : store.availableCount > 0 ? "#fde68a" : "#fecaca"}`,
+                  }}
+                >
+                  {store.availableCount} of {store.totalItems} available
+                </span>
+              </div>
+            </div>
+
+            {/* List of items on this platform */}
+            <div className="app-store-items-list">
+              {store.items.map((row, rIdx) => {
+                const it = row.item;
+                const emoji = getProductEmoji(row.term);
+                return (
+                  <div key={`store-item-${store.id}-${rIdx}`} className={`app-store-item-row ${!row.isAvailable ? "app-store-item-row--unavailable" : ""}`}>
+                    <div style={{ display: "flex", alignItems: "flex-start", gap: "8px", flex: 1, minWidth: 0 }}>
+                      <span style={{ fontSize: "16px", lineHeight: "1.2" }}>{emoji}</span>
+                      <div style={{ minWidth: 0, flex: 1 }}>
+                        <div style={{ fontSize: "13px", fontWeight: 700, color: "#1e293b", textTransform: "capitalize" }}>
+                          {row.term}
+                        </div>
+                        {row.isAvailable && it ? (
+                          <div
+                            style={{
+                              fontSize: "11px",
+                              color: "#64748b",
+                              whiteSpace: "nowrap",
+                              overflow: "hidden",
+                              textOverflow: "ellipsis",
+                              marginTop: "2px",
+                            }}
+                            title={it.product_name}
+                          >
+                            {it.product_name}
+                            {it.packageDisplay && ` (${it.packageDisplay})`}
+                          </div>
+                        ) : (
+                          <div style={{ fontSize: "11px", color: "#dc2626", marginTop: "2px", fontWeight: 500 }}>
+                            Not available on {store.name}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    <div style={{ textAlign: "right", marginLeft: "10px", flexShrink: 0 }}>
+                      {row.isAvailable && it ? (
+                        <div>
+                          <div style={{ display: "flex", alignItems: "baseline", gap: "4px", justifyContent: "flex-end" }}>
+                            <span style={{ fontSize: "14px", fontWeight: 800, color: "#0f172a" }}>
+                              ₹{it.price}
+                            </span>
+                            {it.best && (
+                              <span style={{ fontSize: "10px", background: "#dcfce7", color: "#15803d", padding: "1px 5px", borderRadius: "4px", fontWeight: 700 }}>
+                                Best
+                              </span>
+                            )}
+                          </div>
+                          {it.unitPriceDisplay && (
+                            <div style={{ fontSize: "10px", color: "#15803d", fontWeight: 600 }}>
+                              {it.unitPriceDisplay}
+                            </div>
+                          )}
+                          {it.product_url && (
+                            <a
+                              href={it.product_url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              style={{ fontSize: "11px", color: "#2563eb", textDecoration: "underline", display: "inline-block", marginTop: "2px" }}
+                            >
+                              View ↗
+                            </a>
+                          )}
+                        </div>
+                      ) : (
+                        <div>
+                          <span
+                            style={{
+                              fontSize: "11px",
+                              fontWeight: 700,
+                              color: "#b91c1c",
+                              background: "#fee2e2",
+                              padding: "2px 7px",
+                              borderRadius: "6px",
+                              display: "inline-block",
+                            }}
+                          >
+                            Not Available
+                          </span>
+                          <div>
+                            <a
+                              href={`${store.searchBase}${encodeURIComponent(row.term)}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              style={{ fontSize: "10px", color: "#64748b", textDecoration: "underline", display: "inline-block", marginTop: "3px" }}
+                            >
+                              Search store ↗
+                            </a>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Store Footer */}
+            <div className="app-store-col-footer">
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
+                <span style={{ fontSize: "12px", color: "#64748b" }}>Available Items Total:</span>
+                <span style={{ fontSize: "14px", fontWeight: 800, color: store.availableCount > 0 ? "#0f172a" : "#94a3b8" }}>
+                  {store.availableCount > 0 ? `₹${store.subtotal.toFixed(2)}` : "—"}
+                </span>
+              </div>
+              <a
+                href={`${store.searchBase}${encodeURIComponent(isMulti ? products.map(p => p.term).join(" ") : input)}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className={`app-platform-card-button app-platform-card-button--${store.id}`}
+                style={{ display: "block", textAlign: "center", textDecoration: "none", fontSize: "12px", padding: "8px" }}
+              >
+                Open {store.name} ↗
+              </a>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function ProductSection({ prod, index, totalCount }) {
   const emoji = getProductEmoji(prod.term);
   const bestOrderTotal = prod.best ? prod.best.price + (prod.best.delivery ?? 0) : null;
@@ -428,7 +656,7 @@ function ProductSection({ prod, index, totalCount }) {
             <div className="app-bar-card-meta">{prod.platforms.length} platforms</div>
           </div>
           {prod.platforms
-            .slice()
+            .filter((item) => item.isAvailable && item.price !== null)
             .sort((a, b) => (a.price + a.delivery) - (b.price + b.delivery))
             .map((item) => (
               <BarRow
@@ -556,7 +784,7 @@ export default function ComparePage({
       </header>
 
       <div className="app-hero-strip">
-        Fast product comparison across Blinkit, Zepto, BigBasket and JioMart — powered by BuyWise.
+        Fast product comparison across Blinkit, Zepto, and BigBasket — powered by BuyWise.
       </div>
 
       <main className="app-main">
@@ -587,7 +815,7 @@ export default function ComparePage({
                   upload a photo of your list
                 </button>
               )}
-              {" "}to extract and compare all items in parallel across Blinkit, Zepto, BigBasket, and JioMart.
+              {" "}to extract and compare all items in parallel across Blinkit, Zepto, and BigBasket.
             </p>
             <div className="app-hero-badges">
               <Badge variant="info">Parallel extraction</Badge>
@@ -654,7 +882,10 @@ export default function ComparePage({
                     {/* Render Smart Cart split card preview at the top of all items */}
                     <SmartCartOptimizerCard optimized={result.optimized} products={products} />
 
-                    <div className="app-section-label" style={{ marginTop: "16px" }}>
+                    {/* Platform Store Overview: show all searched items across each platform */}
+                    <PlatformStoreOverviewCard products={products} isMulti={true} input={input} />
+
+                    <div className="app-section-label" style={{ marginTop: "24px" }}>
                       Individual Product Comparisons ({products.length} Items)
                     </div>
 
@@ -767,7 +998,11 @@ export default function ComparePage({
                   </div>
                 )}
 
-                <div className="app-section-label">Platform comparison</div>
+                <div style={{ marginTop: "20px" }}>
+                  <PlatformStoreOverviewCard products={products} platforms={platforms} isMulti={false} input={input} />
+                </div>
+
+                <div className="app-section-label">Detailed platform comparison</div>
                 <div className="app-platforms-grid">
                   {platforms.length > 0 ? (
                     platforms.map((item, index) => <PlatformCard key={`${item.id}-${index}`} item={item} index={index} />)
@@ -785,7 +1020,7 @@ export default function ComparePage({
                     <div className="app-bar-card-meta">{platforms.length} platforms compared</div>
                   </div>
                   {platforms
-                    .slice()
+                    .filter((item) => item.isAvailable && item.price !== null)
                     .sort((a, b) => (a.price + a.delivery) - (b.price + b.delivery))
                     .map((item) => (
                       <BarRow
