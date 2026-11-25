@@ -80,8 +80,8 @@ export default function HomePage({
       <div className="home-page">
 
         <section className="home-hero-section">
-           <div className="home-hero-glow" />
-           <div className="home-hero-content"></div>
+          <div className="home-hero-glow" />
+          <div className="home-hero-content"></div>
           <div className="home-hero-content">
             <div className="fade-up home-hero-tag">
               <span className="home-hero-tag-dot" />
@@ -167,7 +167,7 @@ export default function HomePage({
           </div>
         </section>
 
-        <section className="home-stats-section">
+        {/* <section className="home-stats-section">
           <div className="home-stats-grid">
             {STATS.map((s, i) => (
               <div key={i} className="home-stat-card">
@@ -178,7 +178,7 @@ export default function HomePage({
               </div>
             ))}
           </div>
-        </section>
+        </section> */}
 
         <section
           ref={workflowRef}
