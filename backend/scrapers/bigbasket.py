@@ -55,14 +55,17 @@ async def scrape_bigbasket(product_name, headless=True, lat=12.9716, lon=77.5946
                 timeout=45000
             )
 
-            # Wait for product cards or prices
+            # Wait for product cards or links
             try:
                 await page.wait_for_selector(
-                    'a[href*="/pd/"], [class*="SKUDeck"], text=₹',
-                    timeout=20000
+                    'a[href*="/pd/"], div[class*="SKUDeck"], li[class*="sc-ciQpPG"]',
+                    timeout=15000
                 )
             except Exception:
-                await page.wait_for_timeout(3000)
+                try:
+                    await page.wait_for_selector('text=₹', timeout=5000)
+                except Exception:
+                    await page.wait_for_timeout(2000)
 
             await page.wait_for_timeout(1500)
 
@@ -73,14 +76,25 @@ async def scrape_bigbasket(product_name, headless=True, lat=12.9716, lon=77.5946
                 )
                 await page.wait_for_timeout(800)
 
-            # Extract complete product cards
+            # Extract complete product cards from live BigBasket DOM
             cards_data = await page.evaluate("""
                 () => {
                     // Match cards by SKUDeck, li container, or links
-                    const decks = Array.from(
-                        document.querySelectorAll('div[class*="SKUDeck"], li[class*="sc-ciQpPG"], ul[class*="grid"] li')
+                    const deckNodes = document.querySelectorAll(
+                        'li[class*="sc-ciQpPG"], div[class*="SKUDeck"], ul[class*="grid"] li, a[href*="/pd/"]'
                     );
-                    const cards = decks.length > 0 ? decks : Array.from(document.querySelectorAll('ul.grid li'));
+
+                    let cards = [];
+                    deckNodes.forEach(node => {
+                        const card = node.closest('li') || (node.matches && node.matches('div[class*="SKUDeck"]') ? node : node.parentElement);
+                        if (card && !cards.includes(card)) {
+                            cards.push(card);
+                        }
+                    });
+
+                    if (cards.length === 0) {
+                        cards = Array.from(document.querySelectorAll('ul.grid li, ul[class*="grid"] li, div[class*="SKUDeck"]'));
+                    }
 
                     return cards.map(card => {
                         const productLink = card.querySelector(
@@ -90,7 +104,9 @@ async def scrape_bigbasket(product_name, headless=True, lat=12.9716, lon=77.5946
                         if (!productLink) return null;
 
                         // Product image
-                        const image = card.querySelector('img[title], img[alt], img');
+                        const image = card.querySelector('img[class*="DeckImage"], img[title], img[alt], img');
+                        const imgTitle = image ? (image.getAttribute('title') || image.getAttribute('alt') || '') : '';
+                        const imgSrc = image ? (image.currentSrc || image.src || image.getAttribute('src')) : null;
 
                         // Brand
                         const brandEl = card.querySelector(
@@ -99,53 +115,94 @@ async def scrape_bigbasket(product_name, headless=True, lat=12.9716, lon=77.5946
                         const brand = brandEl ? brandEl.innerText.trim() : '';
 
                         // Product name
-                        const h3El = card.querySelector('h3, [class*="BrandName"] + div h3, div > h3');
+                        const h3El = card.querySelector(
+                            'div.break-words h3, [class*="BrandName"] ~ div h3, h3.block, h3'
+                        );
                         let name = h3El ? h3El.innerText.trim() : '';
-                        if (!name && image) {
-                            name = (image.getAttribute('title') || image.getAttribute('alt') || '').trim();
+                        if (!name && imgTitle) {
+                            name = imgTitle;
                         }
 
-                        // Pack size from button or dropdown
-                        const buttons = Array.from(
-                            card.querySelectorAll('button, [id*="headlessui-listbox-button"], span[class*="PackSize"]')
-                        );
+                        // Pack size from button, dropdown, or PackSelector
                         let quantity = '';
-                        for (const btn of buttons) {
-                            const bText = btn.innerText || '';
-                            const m = bText.match(/\\d+(?:\\.\\d+)?\\s*(?:kg|g|gm|gms|ml|l|litre|liter|pack|piece|pcs|unit)/i);
+                        const packEl = card.querySelector(
+                            '[class*="PackSelector"] span, [id*="headlessui-listbox-button"] button span, [id*="headlessui-listbox-button"] span, span[class*="PackSize"]'
+                        );
+                        if (packEl && packEl.innerText) {
+                            const m = packEl.innerText.match(/\\d+(?:\\.\\d+)?\\s*(?:kg|g|gm|gms|ml|l|litre|liter|pack|piece|pcs|unit|pouch)/i);
+                            if (m) quantity = m[0];
+                            else quantity = packEl.innerText.trim();
+                        }
+
+                        if (!quantity) {
+                            const buttons = Array.from(
+                                card.querySelectorAll('button, [id*="headlessui-listbox-button"], [class*="PackSelector"]')
+                            );
+                            for (const btn of buttons) {
+                                const bText = btn.innerText || '';
+                                const m = bText.match(/\\d+(?:\\.\\d+)?\\s*(?:kg|g|gm|gms|ml|l|litre|liter|pack|piece|pcs|unit|pouch)/i);
+                                if (m) {
+                                    quantity = m[0];
+                                    break;
+                                }
+                            }
+                        }
+
+                        // Fallback quantity from product title or image title
+                        if (!quantity) {
+                            const combinedTitle = `${name} ${imgTitle}`;
+                            const m = combinedTitle.match(/\\d+(?:\\.\\d+)?\\s*(?:kg|g|gm|gms|ml|l|litre|liter|pack|piece|pcs|unit|pouch)/i);
                             if (m) {
                                 quantity = m[0];
-                                break;
                             }
                         }
 
                         // Selling price and MRP
-                        const cardText = card.innerText || '';
-                        const priceMatches = cardText.match(/₹\\s*[\\d,.]+/g) || [];
-                        const prices = priceMatches.map(p =>
-                            parseFloat(p.replace(/[^\\d.]/g, ''))
-                        ).filter(n => !isNaN(n) && n > 0);
+                        const priceEls = Array.from(
+                            card.querySelectorAll('div[class*="sc-jMakVo"] span, span[class*="Pricing"], div:has(> span)')
+                        );
+                        let prices = [];
+                        for (const el of priceEls) {
+                            const txt = el.innerText || '';
+                            const matches = txt.match(/₹\\s*[\\d,.]+/g);
+                            if (matches) {
+                                for (const p of matches) {
+                                    const num = parseFloat(p.replace(/[^\\d.]/g, ''));
+                                    if (!isNaN(num) && num > 0) prices.push(num);
+                                }
+                            }
+                        }
+
+                        if (prices.length === 0) {
+                            const cardText = card.innerText || '';
+                            const priceMatches = cardText.match(/₹\\s*[\\d,.]+/g) || [];
+                            prices = priceMatches.map(p =>
+                                parseFloat(p.replace(/[^\\d.]/g, ''))
+                            ).filter(n => !isNaN(n) && n > 0);
+                        }
 
                         // ETA
-                        const textLines = cardText
-                            .split('\\n')
-                            .map(t => t.trim())
-                            .filter(Boolean);
-
-                        const etaText = textLines.find(t =>
-                            /^\\d+\\s*mins?$/i.test(t)
-                        ) || '15 mins';
+                        const etaEl = card.querySelector(
+                            '[class*="Eta"] div, div.text-slimyGreen-800, [class*="Eta"]'
+                        );
+                        let etaText = etaEl ? etaEl.innerText.trim() : '';
+                        if (!etaText) {
+                            const cardText = card.innerText || '';
+                            const m = cardText.match(/\\b\\d+\\s*mins?\\b/i);
+                            if (m) etaText = m[0];
+                            else etaText = '15 mins';
+                        }
 
                         // Product URL
-                        const productUrl = productLink.getAttribute('href');
+                        const productUrl = productLink.getAttribute('href') || '';
 
                         return {
                             brand,
                             name,
                             fullName: [brand, name].filter(Boolean).join(' '),
-                            quantity,
+                            quantity: quantity || '1 pack',
                             prices,
-                            image: image ? (image.src || image.getAttribute('src')) : null,
+                            image: imgSrc,
                             productUrl,
                             eta: etaText
                         };
@@ -158,10 +215,10 @@ async def scrape_bigbasket(product_name, headless=True, lat=12.9716, lon=77.5946
             for item in cards_data:
                 try:
                     name = item.get("fullName") or item.get("name")
-                    qty_text = item.get("quantity")
+                    qty_text = item.get("quantity") or "1 pack"
                     prices = item.get("prices") or []
 
-                    if not name or not prices or not qty_text:
+                    if not name or not prices:
                         continue
 
                     # First displayed price is the selling price
@@ -190,6 +247,9 @@ async def scrape_bigbasket(product_name, headless=True, lat=12.9716, lon=77.5946
 
                     if product_info and product_info.get("normalized_quantity") is not None:
                         extracted_products.append(product_info)
+
+                except Exception:
+                    continue
 
                 except Exception:
                     continue
